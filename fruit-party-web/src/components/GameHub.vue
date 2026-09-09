@@ -1,162 +1,65 @@
 <template>
-  <!-- 大厅固定左右布局：个人信息在左，玩家主要操作在右。 -->
+  <!-- GameHub 是大厅页面容器，只负责排版和组件组合，不处理子区域细节。 -->
   <main class="game-hub">
     <aside class="profile-panel">
-      <!-- 后续会跳转个人主页；当前先提供清晰的入口和按钮语义。 -->
+      <!-- 个人主页按钮目前使用假用户资料，点击逻辑留到个人主页阶段。 -->
       <button class="profile-button" type="button" title="个人主页">
         <span class="avatar" aria-hidden="true">🙂</span>
-        <span>
-          <strong>水果新手</strong>
-          <small>个人主页</small>
-        </span>
+        <span><strong>水果新手</strong><small>个人主页</small></span>
       </button>
-
-      <p class="progress">闯关进度 <strong>0 / 5</strong></p>
-
-      <!-- 装饰水果透明且禁用指针事件，保证不影响头像和模式按钮点击。 -->
-      <span class="background-fruit watermelon" aria-hidden="true">🍉</span>
-      <span class="background-fruit orange" aria-hidden="true">🍊</span>
+      <!-- 两份榜单数据经由 props 传入排行榜，子组件只负责切换与显示。 -->
+      <LeaderboardPanel :endless-players="endlessRankingPlayers" :hard-players="hardRankingPlayers" />
     </aside>
 
     <section class="challenge-panel" aria-labelledby="challenge-title">
+      <!-- 状态、挑战和动态按阅读顺序排列，细节由各自子组件处理。 -->
+      <PlayerStats :stats="lobbyStats" />
       <h1 id="challenge-title">选择挑战</h1>
-
-      <!-- 闯关入口向父组件发出事件，由 App 决定切换到关卡选择页面。 -->
-      <button class="challenge-card campaign" type="button" data-test="campaign-button" @click="$emit('select-campaign')">
-        <span class="mode-label">CAMPAIGN</span>
-        <strong>闯关挑战</strong>
-        <small>第 1 关</small>
-        <span class="fruit-icon" aria-hidden="true">🍎</span>
-        <span class="arrow" aria-hidden="true">→</span>
-      </button>
-
-      <!-- disabled 阻止点击；通过第 5 关后会由真实进度数据移除这个状态。 -->
-      <button class="challenge-card endless" type="button" disabled>
-        <span class="mode-label">ENDLESS</span>
-        <strong>无尽挑战</strong>
-        <small>通关第 5 关解锁</small>
-        <span class="fruit-icon" aria-hidden="true">🍇</span>
-        <span class="lock" data-test="endless-lock">锁定</span>
-      </button>
+      <!-- highestLevel 决定无尽模式是否可用；select-mode 再原样交给 App.vue 统一处理页面跳转。 -->
+      <ChallengeModes :highest-level="highestLevel" @select-mode="$emit('select-mode', $event)" />
     </section>
   </main>
 </template>
 
 <script>
+// 四个组件各自负责一个功能区，GameHub 只负责把它们组装起来。
+import LeaderboardPanel from './LeaderboardPanel.vue'
+import PlayerStats from './PlayerStats.vue'
+import ChallengeModes from './ChallengeModes.vue'
+import { endlessRankingPlayers, hardRankingPlayers, lobbyStats } from '../data/lobby-data'
+
 export default {
   name: 'GameHub',
+  // 注册后，模板才可以使用这些组件标签。
+  components: { LeaderboardPanel, PlayerStats, ChallengeModes },
+  props: {
+    // 最高普通关卡由 App.vue 持有；默认值令组件单独测试时模拟新玩家。
+    highestLevel: {
+      type: Number,
+      default: 1,
+    },
+  },
+  data() {
+    // data 返回响应式对象；将来接口数据变化时，页面会自动更新。
+    return { endlessRankingPlayers, hardRankingPlayers, lobbyStats }
+  },
 }
 </script>
 
 <style scoped>
-/* 深蓝是主色，蓝紫色只用于边框和局部光影，保持黑暗幽蓝氛围。 */
-.game-hub {
-  display: grid;
-  grid-template-columns: minmax(260px, 39%) minmax(0, 61%);
-  min-height: 100vh;
-  overflow: hidden;
-  background: #09172d;
-}
-
-.profile-panel {
-  position: relative;
-  min-height: 100%;
-  overflow: hidden;
-  padding: 28px;
-  border-right: 1px solid #3b5278;
-  background: #0b1930;
-}
-
-.profile-button {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  border: 0;
-  background: transparent;
-  color: #eff5ff;
-  text-align: left;
-}
-
-.avatar {
-  display: grid;
-  width: 42px;
-  height: 42px;
-  place-items: center;
-  border: 2px solid #ffd36a;
-  border-radius: 50%;
-  background: #29436d;
-  font-size: 21px;
-}
-
-.profile-button strong,
-.profile-button small { display: block; }
-.profile-button small { margin-top: 3px; color: #a9bbd4; font-size: 11px; }
-
-.progress {
-  position: relative;
-  z-index: 1;
-  margin: 180px 0 0;
-  color: #c6d4e7;
-  font-size: 13px;
-}
-
-.progress strong { color: #ffd36a; }
-
-.background-fruit {
-  position: absolute;
-  z-index: 0;
-  opacity: 0.16;
-  font-size: 88px;
-  filter: drop-shadow(0 10px 12px #010610);
-  pointer-events: none;
-}
-
-.watermelon { bottom: 10%; left: 4%; transform: rotate(-20deg); }
-.orange { top: 25%; right: -17%; transform: rotate(22deg); }
-
-.challenge-panel {
-  padding: 40px 30px;
-  background: radial-gradient(circle at 88% 8%, #29255d 0, #122648 38%, #0a1830 78%);
-}
-
-h1 { margin: 0 0 24px; font-size: 21px; }
-
-.challenge-card {
-  position: relative;
-  display: block;
-  width: 100%;
-  min-height: 140px;
-  margin: 15px 0;
-  padding: 21px;
-  overflow: hidden;
-  border: 1px solid #506991;
-  border-radius: 7px;
-  background: #172b4d;
-  color: #f7f9ff;
-  text-align: left;
-  box-shadow: inset 0 1px #ffffff12;
-}
-
-.campaign:hover { border-color: #ffd36a; background: #1c345a; }
-.challenge-card:disabled { border-color: #415575; background: #10203c; color: #b0bfd3; cursor: not-allowed; opacity: 0.72; }
-
-.mode-label,
-.challenge-card strong,
-.challenge-card small { display: block; }
-.mode-label { color: #ffd36a; font-size: 10px; font-weight: 700; letter-spacing: 1px; }
-.challenge-card strong { margin: 9px 0 6px; font-size: 19px; }
-.challenge-card small { color: #b7c7dd; font-size: 12px; }
-
-.fruit-icon { position: absolute; top: 16px; right: 21px; opacity: 0.62; font-size: 43px; }
-.arrow { position: absolute; right: 21px; bottom: 16px; color: #ffd36a; font-size: 23px; }
-.lock { position: absolute; right: 15px; bottom: 14px; padding: 5px 8px; border: 1px solid #7e95b8; border-radius: 4px; background: #0a1529; font-size: 11px; }
-
-@media (max-width: 700px) {
-  .game-hub { grid-template-columns: 1fr; }
-  .profile-panel { min-height: 160px; border-right: 0; border-bottom: 1px solid #3b5278; }
-  .progress { margin-top: 65px; }
-  .challenge-panel { padding: 28px 20px; }
-}
+/* scoped 让这些布局样式只属于 GameHub，不影响登录页等其他组件。 */
+/* 近黑蓝作为统一底色，低对比纹理保留“幽蓝”气氛而不抢走模式卡的颜色。 */
+.game-hub { display: grid; grid-template-columns: minmax(310px, 42%) minmax(420px, 58%); min-height: 100vh; overflow: hidden; background-color: #060b16; background-image: repeating-linear-gradient(135deg, #15284c22 0 1px, transparent 1px 78px), repeating-linear-gradient(45deg, transparent 0 116px, #18345814 116px 117px); }
+/* 排行榜使用 absolute 定位，所以父级必须是 position: relative。 */
+.profile-panel { position: relative; min-height: 100%; padding: 28px 34px; border-right: 1px solid #283a57; background: #080f1d66; }
+.profile-button { position: relative; z-index: 1; display: flex; align-items: center; gap: 11px; border: 0; background: transparent; color: #eff5ff; text-align: left; }
+.avatar { display: grid; width: 43px; height: 43px; place-items: center; border: 2px solid #d6ad4c; border-radius: 50%; background: #1c3153; font-size: 21px; }
+.profile-button strong, .profile-button small { display: block; } .profile-button small { margin-top: 3px; color: #a9bbd4; font-size: 11px; }
+/* 右侧用 flex 垂直居中，让状态、挑战和动态形成一个完整内容中枢。 */
+.challenge-panel { display: flex; flex-direction: column; justify-content: center; padding: 42px; background: transparent; }
+.challenge-panel > * { width: min(590px, 100%); align-self: center; }
+/* 状态条横跨右栏，从中间分界线连接到浏览器最右侧。 */
+.challenge-panel > .player-stats { align-self: stretch; width: auto; margin: 0 -42px 25px; }
+.challenge-panel h1 { margin: 0 0 18px; font-size: 21px; }
+@media (max-width: 700px) { .game-hub { grid-template-columns: 1fr; } .profile-panel { min-height: 160px; padding: 28px 20px; border-right: 0; border-bottom: 1px solid #3d659a; } .challenge-panel { display: block; padding: 28px 20px; } .challenge-panel > * { width: 100%; } .challenge-panel > .player-stats { margin: 25px 0; } }
 </style>

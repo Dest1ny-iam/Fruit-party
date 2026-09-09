@@ -1,7 +1,7 @@
 <template>
   <!-- screen 是页面总开关；每个页面细节都留在自己的组件里。 -->
   <AuthPanel v-if="screen === 'auth'" @enter="enterHub" />
-  <GameHub v-else-if="screen === 'hub'" @select-campaign="screen = 'levels'" />
+  <GameHub v-else-if="screen === 'hub'" :highest-level="highestLevel" @select-mode="selectMode" />
   <LevelSelector v-else :highest-level="highestLevel" @back="screen = 'hub'" />
 </template>
 
@@ -28,6 +28,12 @@ export default {
   methods: {
     enterHub() {
       this.screen = 'hub'
+    },
+    // 普通模式已有五关选择页，因此立刻跳转；困难与无尽游戏页将在游戏阶段接入。
+    selectMode(mode) {
+      if (mode === 'normal') {
+        this.screen = 'levels'
+      }
     },
   },
 }

@@ -17,14 +17,15 @@ describe('App', () => {
     expect(wrapper.get('[data-test="login-tab"]').classes()).toContain('is-active')
   })
 
-  it('假登录后显示挑战入口和锁定的无尽模式', async () => {
+  it('假登录后显示三种模式，并锁定尚未解锁的无尽模式', async () => {
     const wrapper = mount(App)
 
     await enterHub(wrapper)
 
     expect(wrapper.text()).toContain('水果新手')
-    expect(wrapper.text()).toContain('闯关挑战')
-    expect(wrapper.text()).toContain('无尽挑战')
+    expect(wrapper.text()).toContain('普通模式')
+    expect(wrapper.text()).toContain('困难模式')
+    expect(wrapper.text()).toContain('无尽模式')
     expect(wrapper.get('[data-test="endless-lock"]').text()).toBe('锁定')
   })
 
@@ -32,7 +33,7 @@ describe('App', () => {
     const wrapper = mount(App)
 
     await enterHub(wrapper)
-    await wrapper.get('[data-test="campaign-button"]').trigger('click')
+    await wrapper.get('[data-test="normal-button"]').trigger('click')
 
     expect(wrapper.text()).toContain('选择关卡')
     expect(wrapper.get('[data-test="level-1"]').attributes('disabled')).toBeUndefined()
