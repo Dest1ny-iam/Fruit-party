@@ -1,0 +1,29 @@
+/* 全局默认字体、文字色和黑暗幽蓝背景。 */
+:root {
+  font-family: Arial, "Microsoft YaHei", sans-serif;
+  color: #eaf2ff;
+  background: #081529;
+}
+
+/* 统一盒模型，元素的宽高会包含内边距和边框。 */
+* {
+  box-sizing: border-box;
+}
+
+/* 清除浏览器默认外边距，并使页面至少填满一屏。 */
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+}
+
+/* 让表单控件继承项目字体。 */
+button,
+input {
+  font: inherit;
+}
+
+/* 鼠标悬停按钮时显示可点击的手型指针。 */
+button {
+  cursor: pointer;
+}

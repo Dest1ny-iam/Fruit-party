@@ -34,7 +34,7 @@ fruit-party-web/
 - Create: `fruit-party-web/src/main.js`
 - Create: `fruit-party-web/src/styles/base.css`
 
-- [ ] **Step 1: 创建前端目录并编写 `package.json`**
+- [x] **Step 1: 创建前端目录并编写 `package.json`**
 
 ```json
 {
@@ -60,13 +60,13 @@ fruit-party-web/
 }
 ```
 
-- [ ] **Step 2: 安装依赖**
+- [x] **Step 2: 安装依赖**
 
 Run: `npm install`
 
 Expected: 命令以退出码 0 结束，并创建 `node_modules` 和 `package-lock.json`。
 
-- [ ] **Step 3: 编写 Vite 配置**
+- [x] **Step 3: 编写 Vite 配置**
 
 ```js
 import { defineConfig } from 'vite'
@@ -81,7 +81,7 @@ export default defineConfig({
 })
 ```
 
-- [ ] **Step 4: 编写浏览器入口和 Vue 挂载文件**
+- [x] **Step 4: 编写浏览器入口和 Vue 挂载文件**
 
 `fruit-party-web/index.html`:
 
@@ -113,7 +113,7 @@ new Vue({
 }).$mount('#app')
 ```
 
-- [ ] **Step 5: 编写全局基础样式**
+- [x] **Step 5: 编写全局基础样式**
 
 ```css
 :root {
@@ -142,7 +142,7 @@ button {
 }
 ```
 
-- [ ] **Step 6: 验证空入口在缺少根组件时失败**
+- [x] **Step 6: 验证空入口在缺少根组件时失败**
 
 Run: `npm run build`
 
@@ -154,7 +154,7 @@ Expected: FAIL，错误信息包含无法解析 `src/App.vue`。这个失败说�
 - Create: `fruit-party-web/src/App.spec.js`
 - Create: `fruit-party-web/src/App.vue`
 
-- [ ] **Step 1: 先写首页行为测试**
+- [x] **Step 1: 先写首页行为测试**
 
 ```js
 import { mount } from '@vue/test-utils'
@@ -178,13 +178,13 @@ describe('App', () => {
 })
 ```
 
-- [ ] **Step 2: 运行测试，确认它因根组件不存在而失败**
+- [x] **Step 2: 运行测试，确认它因根组件不存在而失败**
 
 Run: `npm test`
 
 Expected: FAIL，错误信息包含 `Failed to resolve import "./App.vue"`。
 
-- [ ] **Step 3: 编写最小可用的首页组件**
+- [x] **Step 3: 编写最小可用的首页组件**
 
 ```vue
 <template>
@@ -292,13 +292,13 @@ h2 {
 </style>
 ```
 
-- [ ] **Step 4: 运行组件测试**
+- [x] **Step 4: 运行组件测试**
 
 Run: `npm test`
 
 Expected: PASS，输出显示 2 个测试通过。
 
-- [ ] **Step 5: 构建生产文件**
+- [x] **Step 5: 构建生产文件**
 
 Run: `npm run build`
 
