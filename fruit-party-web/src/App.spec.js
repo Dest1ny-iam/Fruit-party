@@ -38,5 +38,6 @@ describe('App', () => {
     expect(wrapper.text()).toContain('选择关卡')
     expect(wrapper.get('[data-test="level-1"]').attributes('disabled')).toBeUndefined()
     expect(wrapper.get('[data-test="level-2"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.text()).not.toContain('锁定')
   })
 })

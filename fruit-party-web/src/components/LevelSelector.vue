@@ -18,7 +18,8 @@
       >
         <strong>第 {{ level.number }} 关</strong>
         <small>目标 {{ level.targetScore }} 分</small>
-        <span>{{ level.number > highestLevel ? '锁定' : '开始' }}</span>
+        <!-- 未解锁关卡不显示状态文字，只通过暗色卡片和 disabled 属性表达不可用。 -->
+        <span v-if="level.number <= highestLevel">开始</span>
       </button>
     </section>
   </main>
@@ -56,5 +57,5 @@ h1 { margin: 0; font-size: 27px; }
 .level-button small { margin: 9px 0; color: #b7c7dd; }
 .level-button span { color: #ffd36a; font-size: 12px; font-weight: 700; }
 .level-button:disabled { border-color: #415575; background: #10203c; color: #8fa1bb; cursor: not-allowed; }
-.level-button:disabled small, .level-button:disabled span { color: #8fa1bb; }
+.level-button:disabled small { color: #8fa1bb; }
 </style>
