@@ -51,10 +51,10 @@ export default {
 /* 近黑蓝作为统一底色，低对比纹理保留“幽蓝”气氛而不抢走模式卡的颜色。 */
 .game-hub { display: grid; grid-template-columns: minmax(310px, 42%) minmax(420px, 58%); min-height: 100vh; overflow: hidden; background-color: #060b16; background-image: repeating-linear-gradient(135deg, #15284c22 0 1px, transparent 1px 78px), repeating-linear-gradient(45deg, transparent 0 116px, #18345814 116px 117px); }
 /* 排行榜使用 absolute 定位，所以父级必须是 position: relative。 */
-.profile-panel { position: relative; min-height: 100%; padding: 28px 34px; border-right: 1px solid #283a57; background: #080f1d66; }
+.profile-panel { position: relative; min-height: 100%; padding: 28px 24px; border-right: 1px solid #283a57; background: #080f1d66; }
 .profile-button { position: relative; z-index: 1; display: flex; align-items: center; gap: 11px; border: 0; background: transparent; color: #eff5ff; text-align: left; }
-.avatar { display: grid; width: 43px; height: 43px; place-items: center; border: 2px solid #d6ad4c; border-radius: 50%; background: #1c3153; font-size: 21px; }
-.profile-button strong, .profile-button small { display: block; } .profile-button small { margin-top: 3px; color: #a9bbd4; font-size: 11px; }
+.avatar { display: grid; width: 48px; height: 48px; place-items: center; border: 2px solid #d6ad4c; border-radius: 50%; background: #1c3153; font-size: 23px; }
+.profile-button strong, .profile-button small { display: block; } .profile-button strong { font-size: 17px; } .profile-button small { margin-top: 3px; color: #a9bbd4; font-size: 12px; }
 /* 右侧用 flex 垂直居中，让状态、挑战和动态形成一个完整内容中枢。 */
 .challenge-panel { display: flex; flex-direction: column; justify-content: center; padding: 42px; background: transparent; }
 .challenge-panel > * { width: min(590px, 100%); align-self: center; }
