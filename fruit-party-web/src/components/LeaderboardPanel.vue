@@ -73,13 +73,11 @@ export default {
 <style scoped>
 /* 排行榜位于左栏垂直中线；深色面板融入近黑的大厅背景。 */
 .leaderboard-panel { position: absolute; top: 51%; left: 0; width: min(318px, calc(100% - 22px)); padding: 48px 20px 18px; border: 1px solid #3c5579; border-radius: 6px; background: #0a1325; box-shadow: 0 16px 28px #00030ecc; color: #eff5ff; transform: translateY(-50%); }
-/* 用面板色覆盖标题牌背后的顶边，再放置铭牌，边框会在标题处自然断开。 */
-.leaderboard-panel::before { position: absolute; top: -1px; left: 50%; z-index: 1; width: 188px; height: 3px; background: #0a1325; content: ''; transform: translateX(-50%); }
 .leaderboard-plaque { position: absolute; top: -19px; left: 50%; z-index: 2; display: grid; width: 164px; height: 43px; place-items: center; border: 1px solid #d5ad4b; background: #17233a; color: #efd36f; font-size: 18px; font-weight: 700; letter-spacing: 2px; transform: translateX(-50%); clip-path: polygon(10% 0, 90% 0, 100% 22%, 94% 78%, 82% 100%, 18% 100%, 6% 78%, 0 22%); }
 .leaderboard-plaque::before, .leaderboard-plaque::after { position: absolute; top: 50%; width: 24px; border-top: 1px solid #d5ad4b; content: ''; }
 .leaderboard-plaque::before { right: calc(100% + 8px); }
 .leaderboard-plaque::after { left: calc(100% + 8px); }
-.leaderboard-header { padding-bottom: 10px; border-bottom: 1px solid #293d5d; }
+.leaderboard-header { padding-bottom: 12px; border-bottom: 1px solid #293d5d; }
 .ranking-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .ranking-tab { min-height: 29px; border: 1px solid #344866; border-radius: 3px; background: #0d1a30; color: #98aac5; font-size: 11px; }
 .ranking-tab.is-active { border-color: #d5ad4b; background: #2a2a24; color: #f4d771; }
