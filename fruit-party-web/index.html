@@ -1,15 +1,27 @@
+<!-- 告诉浏览器当前文档使用 HTML5 标准解析。 -->
 <!doctype html>
+<!-- lang 会帮助浏览器、搜索引擎和读屏软件判断页面主要语言。 -->
 <html lang="zh-CN">
   <head>
+    <!-- head 放页面配置，用户不会直接在页面正文中看到这些标签。 -->
+    <!-- UTF-8 能正确显示中文、英文和水果符号。 -->
     <meta charset="UTF-8" />
-    <!-- 为后续响应式布局保留正确的设备宽度和缩放方式。 -->
+    <!-- 移动端先使用设备真实宽度，避免页面被浏览器缩小后再显示。 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- description 是页面摘要，后续部署后可能被搜索引擎读取。 -->
     <meta name="description" content="水果切切乐网页小游戏" />
+    <!-- 浏览器标签页上显示的标题。 -->
     <title>水果切切乐</title>
   </head>
   <body>
-    <!-- Vue 会将 App.vue 渲染结果放入这个容器。 -->
+    <!--
+      这是 Vue 的根容器。
+      index.html 先由浏览器加载，main.js 再找到这个 id="app" 的元素，
+      最后把 App.vue 生成的页面内容放进这里。
+    -->
     <div id="app"></div>
+    <!-- type="module" 表示这是 ES Module，可以使用 import / export。 -->
+    <!-- Vite 会从 main.js 开始分析依赖，并在开发时提供热更新。 -->
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
