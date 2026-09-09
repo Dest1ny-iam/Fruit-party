@@ -70,7 +70,7 @@ Expected: PASS。
 - Modify: `fruit-party-web/src/styles/base.css`
 - Test: `fruit-party-web/src/App.spec.js`
 
-- [ ] **Step 1: 写出大厅锁定状态测试**
+- [x] **Step 1: 写出大厅锁定状态测试**
 
 ```js
 it('假登录后显示闯关入口和锁定的无尽入口', async () => {
@@ -84,19 +84,19 @@ it('假登录后显示闯关入口和锁定的无尽入口', async () => {
 })
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm test`
 
 Expected: FAIL，因为大厅还没有无尽模式锁定标记。
 
-- [ ] **Step 3: 实现大厅组件**
+- [x] **Step 3: 实现大厅组件**
 
 `GameHub.vue` 渲染：左侧头像按钮、玩家名“水果新手”、个人主页入口文字、进度 `0 / 5`；右侧“选择挑战”、闯关挑战按钮和禁用的无尽挑战按钮。无尽按钮右下角带 `data-test="endless-lock"` 且文本为“锁定”。水果背景图形只作为低透明度装饰。
 
 `App.vue` 在 `screen === 'hub'` 时渲染 `<GameHub />`。
 
-- [ ] **Step 4: 运行测试和生产构建**
+- [x] **Step 4: 运行测试和生产构建**
 
 Run: `npm test && npm run build`
 
@@ -112,7 +112,7 @@ Expected: PASS；全部测试通过，Vite 生成 `dist`。
 - Modify: `fruit-party-web/src/App.spec.js`
 - Test: `fruit-party-web/src/App.spec.js`
 
-- [ ] **Step 1: 写出失败测试**
+- [x] **Step 1: 写出失败测试**
 
 ```js
 it('进入闯关挑战后只让第一关可选', async () => {
@@ -126,17 +126,17 @@ it('进入闯关挑战后只让第一关可选', async () => {
 })
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `npm test`
 
 Expected: FAIL，因为闯关按钮尚未切换到关卡选择组件。
 
-- [ ] **Step 3: 实现固定关卡数据和选择组件**
+- [x] **Step 3: 实现固定关卡数据和选择组件**
 
 `level-data.js` 导出 5 个对象，每个对象含 `number` 与 `targetScore`。`LevelSelector.vue` 接收 `highestLevel`；数字大于 `highestLevel` 的关卡按钮带有 `disabled` 属性。`GameHub.vue` 在闯关按钮点击时发出 `select-campaign`，`App.vue` 将页面状态改为 `levels`。
 
-- [ ] **Step 4: 运行测试和生产构建**
+- [x] **Step 4: 运行测试和生产构建**
 
 Run: `npm test && npm run build`
 

@@ -1,7 +1,7 @@
 <template>
-  <!-- 认证页独立成组件，未来接后端时只需要替换 submitAuth 的实现。 -->
+  <!-- 认证组件只负责表单状态，并将成功事件交给父组件处理。 -->
   <main class="auth-page">
-    <!-- 低透明度水果仅负责背景氛围，不参与任何点击和表单交互。 -->
+    <!-- 水果装饰不参与交互。 -->
     <span class="fruit fruit-watermelon" aria-hidden="true">🍉</span>
     <span class="fruit fruit-orange" aria-hidden="true">🍊</span>
     <span class="fruit fruit-strawberry" aria-hidden="true">🍓</span>
@@ -11,7 +11,7 @@
       <h1 id="auth-title">{{ title }}</h1>
       <p class="intro">挥出第一刀，开始你的水果旅程。</p>
 
-      <!-- 两个 button 修改同一个 mode 数据，is-active 由 Vue 根据当前状态添加。 -->
+      <!-- mode 决定当前标签、标题、按钮文案和确认密码字段。 -->
       <div class="tabs" role="tablist" aria-label="认证方式">
         <button
           class="tab"
@@ -37,7 +37,7 @@
         </button>
       </div>
 
-      <!-- @submit.prevent 会阻止浏览器跳转，再由 submitAuth 向父组件发送假登录事件。 -->
+      <!-- 阻止默认提交，再向父组件发送假登录事件。 -->
       <form @submit.prevent="submitAuth">
         <label>
           用户名
@@ -47,7 +47,7 @@
           密码
           <input v-model="form.password" type="password" autocomplete="current-password" placeholder="输入密码" required />
         </label>
-        <!-- v-if 让确认密码只在注册模式时存在于页面与表单中。 -->
+        <!-- 注册模式才需要确认密码。 -->
         <label v-if="mode === 'register'">
           确认密码
           <input v-model="form.confirmPassword" type="password" autocomplete="new-password" placeholder="再次输入密码" required />
@@ -66,7 +66,7 @@ export default {
   name: 'AuthPanel',
   data() {
     return {
-      // mode 是当前标签；所有标题、确认密码字段和按钮文案都依赖它变化。
+      // 当前认证模式。
       mode: 'login',
       form: {
         username: '',
@@ -76,7 +76,7 @@ export default {
     }
   },
   computed: {
-    // computed 会缓存结果，只有 mode 改变时才重新计算文案。
+    // 根据 mode 生成界面文案。
     title() {
       return this.mode === 'login' ? '欢迎回来' : '创建账号'
     },
@@ -86,7 +86,7 @@ export default {
   },
   methods: {
     submitAuth() {
-      // 当前阶段没有后端，因此不校验账号，直接让父组件模拟登录成功。
+      // 当前阶段用事件模拟登录成功。
       this.$emit('enter')
     },
   },
@@ -94,7 +94,7 @@ export default {
 </script>
 
 <style scoped>
-/* 页面使用深蓝主色，右上角的低饱和紫光只增加层次，不抢占内容焦点。 */
+/* 深蓝为主，紫光只用于局部层次。 */
 .auth-page {
   position: relative;
   display: grid;
