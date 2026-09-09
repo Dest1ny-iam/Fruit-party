@@ -50,7 +50,7 @@ export default {
 .top-navigation { position: absolute; top: 26px; right: 34px; z-index: 2; display: flex; align-items: center; gap: 8px; }
 .navigation-button { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 10px; border: 1px solid #273d5c; border-radius: 4px; background: #0b1424cc; color: #afbed4; font-size: 12px; }
 .navigation-icon { display: grid; width: 15px; height: 15px; place-items: center; color: #d6b65b; font-size: 17px; line-height: 1; }
-.notification-icon { font-size: 21px; }
+.notification-icon { font-size: 21px; transform: translateY(-1px); }
 .recharge-button { border-color: #71603a; color: #e9d18a; }
 .recharge-message { position: absolute; top: 42px; right: 0; width: max-content; margin: 0; padding: 7px 10px; border: 1px solid #665632; border-radius: 3px; background: #17140dcc; color: #f0d981; font-size: 11px; }
 @media (max-width: 700px) { .top-navigation { top: 20px; right: 20px; } .navigation-button { padding: 0 7px; } }
