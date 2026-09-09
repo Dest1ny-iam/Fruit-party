@@ -1,6 +1,8 @@
 <template>
   <!-- GameHub 是大厅页面容器，只负责排版和组件组合，不处理子区域细节。 -->
   <main class="game-hub">
+    <!-- 全局入口浮在大厅右上角，商店、通知和充值页面后续分别实现。 -->
+    <TopNavigation />
     <aside class="profile-panel">
       <!-- 个人主页按钮目前使用假用户资料，点击逻辑留到个人主页阶段。 -->
       <button class="profile-button" type="button" title="个人主页">
@@ -12,8 +14,6 @@
     </aside>
 
     <section class="challenge-panel" aria-labelledby="challenge-title">
-      <!-- 状态、挑战和动态按阅读顺序排列，细节由各自子组件处理。 -->
-      <PlayerStats :stats="lobbyStats" />
       <h1 id="challenge-title">选择挑战</h1>
       <!-- highestLevel 决定无尽模式是否可用；select-mode 再原样交给 App.vue 统一处理页面跳转。 -->
       <ChallengeModes :highest-level="highestLevel" @select-mode="$emit('select-mode', $event)" />
@@ -22,16 +22,16 @@
 </template>
 
 <script>
-// 四个组件各自负责一个功能区，GameHub 只负责把它们组装起来。
+// 子组件各自负责一个功能区，GameHub 只负责把它们组装起来。
 import LeaderboardPanel from './LeaderboardPanel.vue'
-import PlayerStats from './PlayerStats.vue'
 import ChallengeModes from './ChallengeModes.vue'
-import { endlessRankingPlayers, hardRankingPlayers, lobbyStats } from '../data/lobby-data'
+import TopNavigation from './TopNavigation.vue'
+import { endlessRankingPlayers, hardRankingPlayers } from '../data/lobby-data'
 
 export default {
   name: 'GameHub',
   // 注册后，模板才可以使用这些组件标签。
-  components: { LeaderboardPanel, PlayerStats, ChallengeModes },
+  components: { LeaderboardPanel, ChallengeModes, TopNavigation },
   props: {
     // 最高普通关卡由 App.vue 持有；默认值令组件单独测试时模拟新玩家。
     highestLevel: {
@@ -41,7 +41,7 @@ export default {
   },
   data() {
     // data 返回响应式对象；将来接口数据变化时，页面会自动更新。
-    return { endlessRankingPlayers, hardRankingPlayers, lobbyStats }
+    return { endlessRankingPlayers, hardRankingPlayers }
   },
 }
 </script>
@@ -58,8 +58,6 @@ export default {
 /* 右侧用 flex 垂直居中，让状态、挑战和动态形成一个完整内容中枢。 */
 .challenge-panel { display: flex; flex-direction: column; justify-content: center; padding: 42px; background: transparent; }
 .challenge-panel > * { width: min(590px, 100%); align-self: center; }
-/* 状态条横跨右栏，从中间分界线连接到浏览器最右侧。 */
-.challenge-panel > .player-stats { align-self: stretch; width: auto; margin: 0 -42px 25px; }
 .challenge-panel h1 { margin: 0 0 18px; font-size: 21px; }
-@media (max-width: 700px) { .game-hub { grid-template-columns: 1fr; } .profile-panel { min-height: 160px; padding: 28px 20px; border-right: 0; border-bottom: 1px solid #3d659a; } .challenge-panel { display: block; padding: 28px 20px; } .challenge-panel > * { width: 100%; } .challenge-panel > .player-stats { margin: 25px 0; } }
+@media (max-width: 700px) { .game-hub { grid-template-columns: 1fr; } .profile-panel { min-height: 160px; padding: 28px 20px; border-right: 0; border-bottom: 1px solid #3d659a; } .challenge-panel { display: block; padding: 28px 20px; } .challenge-panel > * { width: 100%; } }
 </style>

@@ -17,10 +17,3 @@ export const hardRankingPlayers = [
   { rank: 4, avatar: 'G', name: '葡萄汽水', score: '通关 3 关' },
   { rank: 5, avatar: 'A', name: '青苹果', score: '通关 2 关' },
 ]
-
-// 顶部状态条只需要“标签 + 数值”，因此用统一对象结构方便后续扩展。
-export const lobbyStats = [
-  { label: '闯关进度', value: '1 / 5' },
-  { label: '最高连击', value: 'x 12' },
-  { label: '累计切中', value: '86' },
-]
