@@ -10,7 +10,7 @@
       <span>通知</span>
     </button>
     <!-- 充值入口保留给后续功能；目前点击仅显示开发状态。 -->
-    <button class="navigation-button recharge-button" type="button" data-test="recharge-button" title="充值" @click="showRechargeMessage = true">
+    <button class="navigation-button recharge-button" type="button" data-test="recharge-button" title="充值" @click="showRechargeNotice">
       <span class="navigation-icon" aria-hidden="true">+</span>
       <span>充值</span>
     </button>
@@ -25,7 +25,22 @@ export default {
   name: 'TopNavigation',
   data() {
     // 这是组件内部的临时 UI 状态，不需要传到 App.vue。
-    return { showRechargeMessage: false }
+    return { showRechargeMessage: false, rechargeTimer: null }
+  },
+  methods: {
+    // 每次点击都重置计时，保证提示从最近一次点击开始完整显示 3 秒。
+    showRechargeNotice() {
+      clearTimeout(this.rechargeTimer)
+      this.showRechargeMessage = true
+      this.rechargeTimer = setTimeout(() => {
+        this.showRechargeMessage = false
+        this.rechargeTimer = null
+      }, 3000)
+    },
+  },
+  // Vue 2 组件销毁前清除计时器，避免页面离开后仍修改已经销毁的组件。
+  beforeDestroy() {
+    clearTimeout(this.rechargeTimer)
   },
 }
 </script>
