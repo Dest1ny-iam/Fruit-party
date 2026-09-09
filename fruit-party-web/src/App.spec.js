@@ -26,7 +26,7 @@ describe('App', () => {
     expect(wrapper.text()).toContain('普通模式')
     expect(wrapper.text()).toContain('困难模式')
     expect(wrapper.text()).toContain('无尽模式')
-    expect(wrapper.get('[data-test="endless-lock"]').text()).toBe('锁定')
+    expect(wrapper.get('[data-test="endless-lock"]').text()).toBe('未解锁')
   })
 
   it('进入闯关挑战后只让第一关可选', async () => {

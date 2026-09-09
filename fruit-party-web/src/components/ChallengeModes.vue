@@ -41,7 +41,7 @@
       <strong>无尽模式</strong>
       <small>{{ isEndlessUnlocked ? '冲击最高分' : '完成普通模式第 5 关解锁' }}</small>
       <span class="fruit-icon" aria-hidden="true">🍇</span>
-      <span v-if="!isEndlessUnlocked" class="lock" data-test="endless-lock">锁定</span>
+      <span v-if="!isEndlessUnlocked" class="lock" data-test="endless-lock">未解锁</span>
       <span v-else class="arrow" aria-hidden="true">→</span>
     </button>
   </div>

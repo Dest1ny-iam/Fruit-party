@@ -16,6 +16,7 @@ describe('ChallengeModes', () => {
     await wrapper.get('[data-test="normal-button"]').trigger('click')
     expect(wrapper.emitted('select-mode')[0]).toEqual(['normal'])
     expect(wrapper.get('[data-test="endless-button"]').attributes('disabled')).toBe('disabled')
+    expect(wrapper.get('[data-test="endless-lock"]').text()).toBe('未解锁')
   })
 
   it('普通模式完成第五关后开放无尽模式', async () => {
