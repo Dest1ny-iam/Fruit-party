@@ -10,35 +10,28 @@
     <section class="level-grid" aria-label="闯关关卡">
       <button
         v-for="level in levels"
-        :key="level.number"
+        :key="level.levelNumber"
         class="level-button"
         type="button"
-        :data-test="`level-${level.number}`"
-        :disabled="level.number > highestLevel"
+        :data-test="`level-${level.levelNumber}`"
+        :disabled="!level.unlocked"
+        @click="$emit('start', level)"
       >
-        <strong>第 {{ level.number }} 关</strong>
+        <strong>第 {{ level.levelNumber }} 关</strong>
         <small>目标 {{ level.targetScore }} 分</small>
         <!-- 未解锁关卡不显示状态文字，只通过暗色卡片和 disabled 属性表达不可用。 -->
-        <span v-if="level.number <= highestLevel">开始</span>
+        <span v-if="level.unlocked">开始</span>
       </button>
     </section>
   </main>
 </template>
 
 <script>
-import { levels } from '../data/level-data.js'
-
 export default {
   name: 'LevelSelector',
   props: {
-    // 当前最高解锁关由 App 提供，真实项目中会来自玩家进度接口。
-    highestLevel: {
-      type: Number,
-      required: true,
-    },
-  },
-  data() {
-    return { levels }
+    // 关卡数值和解锁状态均来自 /api/me/state。
+    levels: { type: Array, required: true },
   },
 }
 </script>

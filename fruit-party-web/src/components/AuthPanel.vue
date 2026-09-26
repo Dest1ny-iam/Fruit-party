@@ -37,7 +37,7 @@
         </button>
       </div>
 
-      <!-- 阻止默认提交，再向父组件发送假登录事件。 -->
+      <!-- 父组件负责网络请求，本组件只负责输入校验和清晰的错误反馈。 -->
       <form @submit.prevent="submitAuth">
         <label>
           用户名
@@ -52,8 +52,13 @@
           确认密码
           <input v-model="form.confirmPassword" type="password" autocomplete="new-password" placeholder="再次输入密码" required />
         </label>
+        <label class="terms-label">
+          <input v-model="form.acceptedTerms" type="checkbox" required />
+          <span>我已阅读并同意《用户协议》和《隐私政策》</span>
+        </label>
+        <p v-if="errorMessage" class="auth-error" role="alert">{{ errorMessage }}</p>
 
-        <button class="submit-button" type="submit" data-test="enter-hub">
+        <button class="submit-button" type="submit" data-test="enter-hub" :disabled="submitting">
           {{ submitText }}
         </button>
       </form>
@@ -64,6 +69,10 @@
 <script>
 export default {
   name: 'AuthPanel',
+  props: {
+    errorMessage: { type: String, default: '' },
+    submitting: { type: Boolean, default: false },
+  },
   data() {
     return {
       // 当前认证模式。
@@ -72,6 +81,7 @@ export default {
         username: '',
         password: '',
         confirmPassword: '',
+        acceptedTerms: false,
       },
     }
   },
@@ -86,8 +96,16 @@ export default {
   },
   methods: {
     submitAuth() {
-      // 当前阶段用事件模拟登录成功。
-      this.$emit('enter')
+      if (this.mode === 'register' && this.form.password !== this.form.confirmPassword) {
+        this.$emit('validation-error', '两次输入的密码不一致')
+        return
+      }
+      this.$emit('authenticate', {
+        mode: this.mode,
+        username: this.form.username,
+        password: this.form.password,
+        acceptedTerms: this.form.acceptedTerms,
+      })
     },
   },
 }
@@ -147,7 +165,11 @@ h1 { margin: 0; color: #f7f9ff; font-size: 28px; }
 label { display: grid; gap: 7px; margin: 14px 0; color: #c8d5e8; font-size: 12px; }
 input { width: 100%; min-height: 42px; padding: 0 12px; border: 1px solid #516a94; border-radius: 5px; outline: none; background: #0a1730; color: #f7f9ff; }
 input:focus { border-color: #ffd36a; box-shadow: 0 0 0 2px #ffd36a33; }
+.terms-label { grid-template-columns: 16px 1fr; align-items: start; gap: 8px; margin-top: 18px; color: #9fb0ca; line-height: 1.5; }
+.terms-label input { min-height: 16px; margin: 1px 0 0; accent-color: #f0644f; }
+.auth-error { margin: 14px 0 0; padding: 9px 10px; border: 1px solid #a84952; border-radius: 5px; background: #4a2028; color: #ffd4d5; font-size: 12px; line-height: 1.5; }
 
 .submit-button { width: 100%; min-height: 44px; margin-top: 10px; border: 0; border-radius: 5px; background: #f0644f; color: #ffffff; font-weight: 700; }
 .submit-button:hover { background: #d84f40; }
+.submit-button:disabled { cursor: wait; opacity: 0.65; }
 </style>

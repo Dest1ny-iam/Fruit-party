@@ -4,13 +4,12 @@
     <!-- 全局入口浮在大厅右上角，商店、通知和充值页面后续分别实现。 -->
     <TopNavigation />
     <aside class="profile-panel">
-      <!-- 个人主页按钮目前使用假用户资料，点击逻辑留到个人主页阶段。 -->
+      <!-- 玩家资料来自 App 已加载的服务端状态。 -->
       <button class="profile-button" type="button" title="个人主页">
-        <span class="avatar" aria-hidden="true">🙂</span>
-        <span><strong>水果新手</strong><small>个人主页</small></span>
+        <span class="avatar" aria-hidden="true">{{ playerAvatar }}</span>
+        <span><strong>{{ player ? player.username : '加载中' }}</strong><small>个人主页</small></span>
       </button>
-      <!-- 两份榜单数据经由 props 传入排行榜，子组件只负责切换与显示。 -->
-      <LeaderboardPanel :endless-players="endlessRankingPlayers" :hard-players="hardRankingPlayers" />
+      <LeaderboardPanel :endless-players="leaderboards.endless" :hard-players="leaderboards.hard" />
     </aside>
 
     <section class="challenge-panel" aria-labelledby="challenge-title">
@@ -26,22 +25,27 @@
 import LeaderboardPanel from './LeaderboardPanel.vue'
 import ChallengeModes from './ChallengeModes.vue'
 import TopNavigation from './TopNavigation.vue'
-import { endlessRankingPlayers, hardRankingPlayers } from '../data/lobby-data'
 
 export default {
   name: 'GameHub',
   // 注册后，模板才可以使用这些组件标签。
   components: { LeaderboardPanel, ChallengeModes, TopNavigation },
   props: {
+    player: { type: Object, default: null },
+    leaderboards: {
+      type: Object,
+      default: () => ({ endless: [], hard: [] }),
+    },
     // 最高普通关卡由 App.vue 持有；默认值令组件单独测试时模拟新玩家。
     highestLevel: {
       type: Number,
       default: 1,
     },
   },
-  data() {
-    // data 返回响应式对象；将来接口数据变化时，页面会自动更新。
-    return { endlessRankingPlayers, hardRankingPlayers }
+  computed: {
+    playerAvatar() {
+      return this.player?.username?.slice(0, 1) || '…'
+    },
   },
 }
 </script>

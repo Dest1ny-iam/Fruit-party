@@ -1,6 +1,10 @@
 import { mount } from '@vue/test-utils'
 import LeaderboardPanel from './LeaderboardPanel.vue'
-import { endlessRankingPlayers, hardRankingPlayers } from '../data/lobby-data'
+const endlessRankingPlayers = [
+  { rank: 1, avatar: '水', name: '水果达人', score: '98,420' },
+  { rank: 2, avatar: '刀', name: '一刀两半', score: '86,100' },
+]
+const hardRankingPlayers = [{ rank: 1, avatar: '夜', name: '夜刃', score: '通关 5 关' }]
 
 describe('LeaderboardPanel', () => {
   it('显示排行榜标题、前三名和当前排名', () => {

@@ -32,7 +32,7 @@
     </header>
 
     <!-- 有序列表表达“排名”的语义，v-for 负责依次渲染当前榜单玩家。 -->
-    <ol class="rank-list">
+    <ol v-if="activePlayers.length" class="rank-list">
       <li v-for="player in activePlayers" :key="player.name" class="rank-item" :class="`rank-${player.rank}`">
         <strong class="rank-number">{{ player.rank }}</strong>
         <span class="rank-avatar" aria-hidden="true">{{ player.avatar }}</span>
@@ -40,6 +40,7 @@
         <span class="rank-score">{{ player.score }}</span>
       </li>
     </ol>
+    <p v-else class="empty-ranking">暂时没有可展示的真实战绩</p>
 
     <p class="player-rank">你的当前排名 <strong># 26</strong></p>
   </section>
@@ -91,6 +92,7 @@ export default {
 .rank-avatar { display: grid; width: 22px; height: 22px; place-items: center; border-radius: 50%; background: #334678; font-size: 10px; }
 .rank-name { overflow: hidden; padding-left: 8px; text-overflow: ellipsis; white-space: nowrap; }
 .rank-score { color: #bdcae0; font-size: 11px; }
+.empty-ranking { margin: 18px 0; color: #8496b2; font-size: 12px; text-align: center; }
 .player-rank { margin: 14px 0 0; color: #aebed5; font-size: 11px; }
 .player-rank strong { margin-left: 4px; color: #f5d77c; }
 @media (max-width: 700px) { .leaderboard-panel { position: relative; top: auto; width: 100%; margin-top: 62px; transform: none; } }

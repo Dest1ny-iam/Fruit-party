@@ -12,11 +12,16 @@ describe('AuthPanel', () => {
     expect(wrapper.get('button[type="submit"]').text()).toBe('创建并进入大厅')
   })
 
-  it('提交表单时通知父组件进入大厅', async () => {
+  it('提交表单时把登录信息交给父组件处理', async () => {
     const wrapper = mount(AuthPanel)
+    await wrapper.get('input[autocomplete="username"]').setValue('tester')
+    await wrapper.get('input[type="password"]').setValue('Tester123')
+    await wrapper.get('input[type="checkbox"]').setChecked()
 
     await wrapper.get('form').trigger('submit.prevent')
 
-    expect(wrapper.emitted('enter')).toHaveLength(1)
+    expect(wrapper.emitted('authenticate')).toEqual([[{
+      mode: 'login', username: 'tester', password: 'Tester123', acceptedTerms: true,
+    }]])
   })
 })

@@ -1,4 +1,5 @@
 .worktrees/
+fruit-party-web/data/
 node_modules/
 dist/
 .superpowers/

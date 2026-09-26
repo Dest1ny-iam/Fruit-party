@@ -3,26 +3,48 @@ import { mount } from '@vue/test-utils'
 import App from './App.vue'
 
 async function enterHub(wrapper) {
-  // 表单带 required 属性，测试先填入内容再提交，模拟真实用户行为。
-  await wrapper.get('input[autocomplete="username"]').setValue('fruit-player')
-  await wrapper.get('input[type="password"]').setValue('12345678')
+  await wrapper.get('input[autocomplete="username"]').setValue('tester')
+  await wrapper.get('input[type="password"]').setValue('Tester123')
+  await wrapper.get('input[type="checkbox"]').setChecked()
   await wrapper.get('form').trigger('submit.prevent')
+  await new Promise((resolve) => setTimeout(resolve, 0))
+}
+
+function api() {
+  return {
+    login: async () => ({ token: 'test-token' }),
+    getPlayerState: async () => ({
+      player: { username: '真实玩家' },
+      wallet: { coins: 0 },
+      progress: {
+        normal: {
+          highestUnlockedLevel: 1,
+          levels: [
+            { levelNumber: 1, targetScore: 180, unlocked: true },
+            { levelNumber: 2, targetScore: 290, unlocked: false },
+          ],
+        },
+        hard: { highestUnlockedLevel: 1, levels: [] },
+      },
+    }),
+    getLeaderboards: async () => ({ endless: [], hard: [] }),
+  }
 }
 
 describe('App', () => {
   it('初始显示登录入口', () => {
-    const wrapper = mount(App)
+    const wrapper = mount(App, { propsData: { api: api() } })
 
     expect(wrapper.get('h1').text()).toBe('欢迎回来')
     expect(wrapper.get('[data-test="login-tab"]').classes()).toContain('is-active')
   })
 
-  it('假登录后显示三种模式，并锁定尚未解锁的无尽模式', async () => {
-    const wrapper = mount(App)
+  it('登录后显示服务端返回的玩家和模式状态', async () => {
+    const wrapper = mount(App, { propsData: { api: api() } })
 
     await enterHub(wrapper)
 
-    expect(wrapper.text()).toContain('水果新手')
+    expect(wrapper.text()).toContain('真实玩家')
     expect(wrapper.text()).toContain('普通模式')
     expect(wrapper.text()).toContain('困难模式')
     expect(wrapper.text()).toContain('无尽模式')
@@ -30,7 +52,7 @@ describe('App', () => {
   })
 
   it('进入闯关挑战后只让第一关可选', async () => {
-    const wrapper = mount(App)
+    const wrapper = mount(App, { propsData: { api: api() } })
 
     await enterHub(wrapper)
     await wrapper.get('[data-test="normal-button"]').trigger('click')
