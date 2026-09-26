@@ -6,6 +6,8 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'player' CHECK(role IN ('player', 'admin')),
   is_tester INTEGER NOT NULL DEFAULT 0 CHECK(is_tester IN (0, 1)),
+  is_disabled INTEGER NOT NULL DEFAULT 0 CHECK(is_disabled IN (0, 1)),
+  disabled_at TEXT,
   avatar_url TEXT,
   coins INTEGER NOT NULL DEFAULT 0 CHECK(coins >= 0),
   energy INTEGER NOT NULL DEFAULT 5 CHECK(energy >= 0),

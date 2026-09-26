@@ -83,9 +83,17 @@ export default {
         this.leaderboards = leaderboards
         this.closePlayerStateStream?.()
         if (typeof this.api.openPlayerStateStream === 'function') {
-          this.closePlayerStateStream = this.api.openPlayerStateStream((nextState) => {
-            this.playerState = nextState
-          })
+          this.closePlayerStateStream = this.api.openPlayerStateStream(
+            (nextState) => { this.playerState = nextState },
+            (nextLeaderboards) => { this.leaderboards = nextLeaderboards },
+            () => {
+              localStorage.removeItem('fruit-party-token')
+              this.closePlayerStateStream?.()
+              this.closePlayerStateStream = null
+              this.screen = 'auth'
+              this.authError = '该账号已被禁用'
+            },
+          )
         }
         this.screen = 'hub'
       } catch (error) {

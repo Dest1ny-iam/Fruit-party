@@ -16,10 +16,15 @@ export function createRealtimeHub() {
     for (const response of clients.get(userId) || []) response.write(payload)
   }
 
+  function publishAll(event, data) {
+    const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
+    for (const responses of clients.values()) for (const response of responses) response.write(payload)
+  }
+
   function close() {
     for (const responses of clients.values()) for (const response of responses) response.end()
     clients.clear()
   }
 
-  return { subscribe, publish, close }
+  return { subscribe, publish, publishAll, close }
 }

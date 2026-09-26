@@ -41,10 +41,19 @@ export function createApp({ databasePath, seed = false } = {}) {
     if (!token) return apiError(res, 401, 'AUTH_REQUIRED', '请先登录')
     try {
       req.auth = readToken(token, JWT_SECRET)
+      const account = db.prepare('SELECT id, role, is_disabled AS isDisabled FROM users WHERE id = ?').get(req.auth.sub)
+      if (!account) return apiError(res, 401, 'INVALID_TOKEN', '登录状态已失效')
+      if (account.isDisabled) return apiError(res, 403, 'ACCOUNT_DISABLED', '该账号已被禁用')
+      req.account = account
       return next()
     } catch {
       return apiError(res, 401, 'INVALID_TOKEN', '登录状态已失效')
     }
+  }
+
+  const requireAdmin = (req, res, next) => {
+    if (req.account?.role !== 'admin') return apiError(res, 403, 'ADMIN_REQUIRED', '需要管理员权限')
+    return next()
   }
 
   app.get('/api/health', async (_req, res) => res.json({ data: { status: 'ok' }, error: null }))
@@ -52,10 +61,11 @@ export function createApp({ databasePath, seed = false } = {}) {
   app.post('/api/auth/login', async (req, res) => {
     const { username = '', password = '', acceptedTerms = false } = req.body || {}
     if (!acceptedTerms) return apiError(res, 422, 'TERMS_REQUIRED', '请先阅读并同意用户协议')
-    const user = db.prepare('SELECT id, username, password_hash AS passwordHash, role FROM users WHERE username = ?').get(username.trim())
+    const user = db.prepare('SELECT id, username, password_hash AS passwordHash, role, is_disabled AS isDisabled FROM users WHERE username = ?').get(username.trim())
     if (!user || !verifyPassword(password, user.passwordHash)) {
       return apiError(res, 401, 'INVALID_CREDENTIALS', '用户名或密码错误')
     }
+    if (user.isDisabled) return apiError(res, 403, 'ACCOUNT_DISABLED', '该账号已被禁用')
     const token = issueToken(user, JWT_SECRET)
     setSessionCookie(res, token)
     return res.json({ data: { token, player: { id: user.id, username: user.username, role: user.role } }, error: null })
@@ -89,6 +99,29 @@ export function createApp({ databasePath, seed = false } = {}) {
 
   app.get('/api/leaderboards', async (_req, res) => {
     return res.json({ data: readLeaderboards(db), error: null })
+  })
+
+  app.get('/api/admin/players', authenticate, requireAdmin, async (_req, res) => {
+    const players = db.prepare(`
+      SELECT id, username, role, is_tester AS isTester, coins, energy, created_at AS createdAt
+      FROM users WHERE is_disabled = 0 ORDER BY created_at DESC, id DESC
+    `).all().map((player) => ({ ...player, isTester: Boolean(player.isTester) }))
+    return res.json({ data: players, error: null })
+  })
+
+  app.patch('/api/admin/players/:playerId/status', authenticate, requireAdmin, async (req, res) => {
+    const playerId = Number(req.params.playerId)
+    const disabled = req.body?.disabled === true
+    if (!Number.isInteger(playerId) || playerId < 1) return apiError(res, 422, 'INVALID_PLAYER_ID', '无效玩家')
+    if (playerId === req.auth.sub && disabled) return apiError(res, 422, 'CANNOT_DISABLE_SELF', '不能禁用当前管理员账号')
+    const result = db.prepare(`
+      UPDATE users SET is_disabled = ?, disabled_at = CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE NULL END, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(disabled ? 1 : 0, disabled ? 1 : 0, playerId)
+    if (!result.changes) return apiError(res, 404, 'PLAYER_NOT_FOUND', '玩家不存在')
+    realtime.publish(playerId, disabled ? 'account-disabled' : 'account-enabled', { playerId })
+    realtime.publishAll('leaderboards', readLeaderboards(db))
+    return res.json({ data: { playerId, disabled }, error: null })
   })
 
   app.get('/api/events', authenticate, async (req, res) => {
@@ -146,6 +179,7 @@ export function createApp({ databasePath, seed = false } = {}) {
     })
     persist()
     realtime.publish(req.auth.sub, 'player-state', readPlayerState(db, req.auth.sub))
+    realtime.publishAll('leaderboards', readLeaderboards(db))
     return res.status(201).json({ data: settlement, error: null })
   })
 

@@ -11,6 +11,9 @@ export function createDatabase(databasePath = 'fruit-party.db') {
   const db = new Database(databasePath)
   db.pragma('journal_mode = WAL')
   db.exec(schema)
+  const columns = db.prepare('PRAGMA table_info(users)').all().map((column) => column.name)
+  if (!columns.includes('is_disabled')) db.exec('ALTER TABLE users ADD COLUMN is_disabled INTEGER NOT NULL DEFAULT 0')
+  if (!columns.includes('disabled_at')) db.exec('ALTER TABLE users ADD COLUMN disabled_at TEXT')
   return db
 }
 
@@ -110,13 +113,13 @@ export function readLeaderboards(db) {
   const endless = db.prepare(`
     SELECT u.username AS name, MAX(a.final_score) AS score
     FROM game_attempts a JOIN users u ON u.id = a.user_id
-    WHERE a.mode = 'endless'
+    WHERE a.mode = 'endless' AND u.is_disabled = 0
     GROUP BY u.id, u.username ORDER BY score DESC, MIN(a.created_at) ASC LIMIT 50
   `).all().map((entry, index) => ({ rank: index + 1, avatar: entry.name.slice(0, 1), name: entry.name, score: entry.score }))
   const hard = db.prepare(`
     SELECT u.username AS name, COUNT(*) AS completedLevels
     FROM level_progress p JOIN users u ON u.id = p.user_id
-    WHERE p.mode = 'hard' AND p.completed_at IS NOT NULL
+    WHERE p.mode = 'hard' AND p.completed_at IS NOT NULL AND u.is_disabled = 0
     GROUP BY u.id, u.username ORDER BY completedLevels DESC, u.id ASC LIMIT 50
   `).all().map((entry, index) => ({ rank: index + 1, avatar: entry.name.slice(0, 1), name: entry.name, score: `通关 ${entry.completedLevels} 关` }))
   return { endless, hard }

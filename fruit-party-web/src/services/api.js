@@ -30,9 +30,11 @@ export function createApiClient({ fetcher = window.fetch.bind(window), getToken 
     getPlayerState: () => request('/api/me/state'),
     getLeaderboards: () => request('/api/leaderboards'),
     settleGame: (settlement) => request('/api/game/settlements', { method: 'POST', body: JSON.stringify(settlement) }),
-    openPlayerStateStream(onState, onError = () => {}) {
+    openPlayerStateStream(onState, onLeaderboards = () => {}, onAccountDisabled = () => {}, onError = () => {}) {
       const stream = new EventSource('/api/events')
       stream.addEventListener('player-state', (event) => onState(JSON.parse(event.data)))
+      stream.addEventListener('leaderboards', (event) => onLeaderboards(JSON.parse(event.data)))
+      stream.addEventListener('account-disabled', onAccountDisabled)
       stream.addEventListener('error', onError)
       return () => stream.close()
     },

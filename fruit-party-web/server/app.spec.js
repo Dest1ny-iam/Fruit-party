@@ -75,6 +75,34 @@ describe('player API', () => {
     expect(response.body.data.hard[0]).toMatchObject({ name: '水果达人', score: '通关 5 关' })
   })
 
+  it('removes a disabled player from leaderboard and administrator permission candidates', async () => {
+    const client = makeClient()
+    const admin = await client.post('/api/auth/login').send({ username: 'admin', password: 'Admin123', acceptedTerms: true })
+    const players = await client.get('/api/admin/players').set('Authorization', `Bearer ${admin.body.data.token}`)
+    const target = players.body.data.find((player) => player.username === '水果达人')
+
+    const disabled = await client.patch(`/api/admin/players/${target.id}/status`)
+      .set('Authorization', `Bearer ${admin.body.data.token}`).send({ disabled: true })
+    const leaderboard = await client.get('/api/leaderboards')
+    const remainingCandidates = await client.get('/api/admin/players').set('Authorization', `Bearer ${admin.body.data.token}`)
+
+    expect(disabled.status).toBe(200)
+    expect(leaderboard.body.data.endless.map((entry) => entry.name)).not.toContain('水果达人')
+    expect(remainingCandidates.body.data.map((player) => player.username)).not.toContain('水果达人')
+  })
+
+  it('rejects login from a disabled account', async () => {
+    const client = makeClient()
+    const admin = await client.post('/api/auth/login').send({ username: 'admin', password: 'Admin123', acceptedTerms: true })
+    const target = (await client.get('/api/admin/players').set('Authorization', `Bearer ${admin.body.data.token}`)).body.data
+      .find((player) => player.username === '一刀两半')
+    await client.patch(`/api/admin/players/${target.id}/status`).set('Authorization', `Bearer ${admin.body.data.token}`).send({ disabled: true })
+    const login = await client.post('/api/auth/login').send({ username: '一刀两半', password: 'Player123', acceptedTerms: true })
+
+    expect(login.status).toBe(403)
+    expect(login.body.error.code).toBe('ACCOUNT_DISABLED')
+  })
+
   it('settles a passed level on the server and unlocks only the next level', async () => {
     const client = makeClient()
     const login = await client.post('/api/auth/login').send({ username: '水果达人', password: 'Player123', acceptedTerms: true })
