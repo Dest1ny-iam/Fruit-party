@@ -39,6 +39,29 @@ export function seedDatabase(db, hashPassword) {
       }
     }
   }
+
+  // 开发环境的展示记录同样走正式表结构；前端不会拥有任何排行榜假数据。
+  const userIds = Object.fromEntries(users.map((user) => [user.username, user.id]))
+  const addAttempt = db.prepare(`
+      INSERT INTO game_attempts (user_id, mode, level_number, base_score, final_score, hit_rate, elapsed_seconds, passed)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+  const hasEndlessAttempt = db.prepare('SELECT 1 FROM game_attempts WHERE user_id = ? AND mode = ? LIMIT 1')
+  const addSeededEndlessAttempt = (username, baseScore, finalScore, hitRate, elapsedSeconds) => {
+    if (!hasEndlessAttempt.get(userIds[username], 'endless')) {
+      addAttempt.run(userIds[username], 'endless', null, baseScore, finalScore, hitRate, elapsedSeconds, 0)
+    }
+  }
+  addSeededEndlessAttempt('水果达人', 73200, 98420, 0.82, 146)
+  addSeededEndlessAttempt('一刀两半', 66100, 86100, 0.79, 163)
+  addSeededEndlessAttempt('tester', 51300, 65600, 0.74, 188)
+
+  const completeHardLevel = db.prepare(`
+      UPDATE level_progress SET best_score = ?, completed_at = CURRENT_TIMESTAMP
+      WHERE user_id = ? AND mode = 'hard' AND level_number = ? AND completed_at IS NULL
+    `)
+  for (let level = 1; level <= 5; level += 1) completeHardLevel.run(500 + level * 170, userIds['水果达人'], level)
+  for (let level = 1; level <= 4; level += 1) completeHardLevel.run(460 + level * 150, userIds['一刀两半'], level)
 }
 
 export function readPlayerState(db, userId) {

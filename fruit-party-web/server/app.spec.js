@@ -67,6 +67,14 @@ describe('player API', () => {
     expect(response.body.data.wallet.coins).toBeGreaterThan(0)
   })
 
+  it('returns leaderboard entries generated from seeded database attempts', async () => {
+    const response = await makeClient().get('/api/leaderboards')
+
+    expect(response.status).toBe(200)
+    expect(response.body.data.endless[0]).toMatchObject({ name: '水果达人', score: expect.any(Number) })
+    expect(response.body.data.hard[0]).toMatchObject({ name: '水果达人', score: '通关 5 关' })
+  })
+
   it('settles a passed level on the server and unlocks only the next level', async () => {
     const client = makeClient()
     const login = await client.post('/api/auth/login').send({ username: '水果达人', password: 'Player123', acceptedTerms: true })
