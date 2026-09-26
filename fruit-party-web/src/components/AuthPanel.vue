@@ -135,6 +135,9 @@ export default {
 .fruit-watermelon { left: 10%; top: 13%; transform: rotate(-16deg); }
 .fruit-orange { right: 10%; top: 24%; transform: rotate(14deg); }
 .fruit-strawberry { left: 16%; bottom: 12%; transform: rotate(10deg); }
+.fruit-watermelon { animation: fruit-float 5.8s ease-in-out infinite; }
+.fruit-orange { animation: fruit-float 6.4s ease-in-out 0.7s infinite reverse; }
+.fruit-strawberry { animation: fruit-float 5.2s ease-in-out 1.1s infinite; }
 
 .auth-card {
   position: relative;
@@ -145,6 +148,7 @@ export default {
   border-radius: 8px;
   background: #101f3ce8;
   box-shadow: 0 22px 54px #020716a8;
+  animation: surface-enter 420ms cubic-bezier(.2, .8, .2, 1) both;
 }
 
 .brand {
@@ -170,6 +174,6 @@ input:focus { border-color: #ffd36a; box-shadow: 0 0 0 2px #ffd36a33; }
 .auth-error { margin: 14px 0 0; padding: 9px 10px; border: 1px solid #a84952; border-radius: 5px; background: #4a2028; color: #ffd4d5; font-size: 12px; line-height: 1.5; }
 
 .submit-button { width: 100%; min-height: 44px; margin-top: 10px; border: 0; border-radius: 5px; background: #f0644f; color: #ffffff; font-weight: 700; }
-.submit-button:hover { background: #d84f40; }
+.submit-button:hover { background: #d84f40; box-shadow: 0 8px 16px #04091470; transform: translateY(-1px); }
 .submit-button:disabled { cursor: wait; opacity: 0.65; }
 </style>

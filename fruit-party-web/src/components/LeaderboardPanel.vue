@@ -84,7 +84,12 @@ export default {
 .ranking-tab.is-active { border-color: #d5ad4b; background: #2a2a24; color: #f4d771; }
 .leaderboard-kicker { display: block; margin-top: 9px; color: #8496b2; font-size: 10px; letter-spacing: 1px; }
 .rank-list { margin: 11px 0 0; padding: 0; list-style: none; }
-.rank-item { display: grid; grid-template-columns: 25px 27px minmax(0, 1fr) auto; align-items: center; min-height: 43px; border-bottom: 1px solid #ffffff0d; font-size: 12px; }
+.rank-item { display: grid; grid-template-columns: 25px 27px minmax(0, 1fr) auto; align-items: center; min-height: 43px; border-bottom: 1px solid #ffffff0d; font-size: 12px; animation: row-enter 320ms ease both; }
+.rank-item:nth-child(2) { animation-delay: 45ms; }
+.rank-item:nth-child(3) { animation-delay: 90ms; }
+.rank-item:nth-child(4) { animation-delay: 135ms; }
+.rank-item:nth-child(5) { animation-delay: 180ms; }
+.rank-item:hover { background: #ffffff08; }
 .rank-number { display: grid; width: 20px; height: 20px; place-items: center; border: 1px solid #465d81; color: #b8c7dc; font-size: 10px; }
 .rank-1 .rank-number { border-color: #efc85d; background: #765019; color: #fff2bb; }
 .rank-2 .rank-number { border-color: #b9c8d8; background: #465b73; color: #f1f7ff; }

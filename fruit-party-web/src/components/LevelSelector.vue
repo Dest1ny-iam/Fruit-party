@@ -45,7 +45,8 @@ h1 { margin: 0; font-size: 27px; }
 .back-button:hover { border-color: #ffd36a; color: #ffd36a; }
 
 .level-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; max-width: 760px; margin: 0 auto; }
-.level-button { min-height: 140px; padding: 20px; border: 1px solid #506991; border-radius: 7px; background: #172b4d; color: #f7f9ff; text-align: left; }
+.level-button { min-height: 140px; padding: 20px; border: 1px solid #506991; border-radius: 7px; background: #172b4d; color: #f7f9ff; text-align: left; animation: surface-enter 320ms ease both; }
+.level-button:hover:not(:disabled) { border-color: #dfb752; background: #1d365e; box-shadow: 0 12px 20px #02091573; transform: translateY(-3px); }
 .level-button strong, .level-button small, .level-button span { display: block; }
 .level-button small { margin: 9px 0; color: #b7c7dd; }
 .level-button span { color: #ffd36a; font-size: 12px; font-weight: 700; }

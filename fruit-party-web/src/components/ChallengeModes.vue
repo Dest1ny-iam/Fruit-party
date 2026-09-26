@@ -69,13 +69,17 @@ export default {
 <style scoped>
 /* 纵向排列保证三种模式有同等入口权重。悬浮放大交互将在下一轮集中加入。 */
 .challenge-modes { display: grid; gap: 10px; }
-.challenge-card { position: relative; display: block; width: 100%; min-height: 94px; padding: 15px 18px; overflow: hidden; border: 1px solid; border-radius: 6px; color: #f5f7ff; text-align: left; box-shadow: inset 0 1px #ffffff12, 0 8px 16px #01050d66; }
+.challenge-card { position: relative; display: block; width: 100%; min-height: 94px; padding: 15px 18px; overflow: hidden; border: 1px solid; border-radius: 6px; color: #f5f7ff; text-align: left; box-shadow: inset 0 1px #ffffff12, 0 8px 16px #01050d66; animation: surface-enter 360ms ease both; }
+.challenge-card:nth-child(2) { animation-delay: 65ms; }
+.challenge-card:nth-child(3) { animation-delay: 130ms; }
 .mode-label, .challenge-card strong, .challenge-card small { display: block; }
 .mode-label { font-size: 10px; font-weight: 700; letter-spacing: 1.4px; }
 .challenge-card strong { margin: 6px 0 4px; font-size: 18px; }
 .challenge-card small { color: #c4ccdc; font-size: 12px; }
 .fruit-icon { position: absolute; top: 14px; right: 20px; opacity: 0.58; font-size: 40px; }
 .arrow { position: absolute; right: 20px; bottom: 14px; font-size: 21px; }
+.challenge-card:not(:disabled):hover { transform: translateY(-3px); box-shadow: inset 0 1px #ffffff24, 0 14px 24px #01050d8c; }
+.challenge-card:not(:disabled):hover .arrow { transform: translateX(4px); }
 /* 金黄色传达“标准主流程”，同时在暗背景上保持可辨识度。 */
 .normal { border-color: #c99731; background: #493611; }
 .normal .mode-label, .normal .arrow { color: #ffda70; }
