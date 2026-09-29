@@ -39,6 +39,11 @@
       <!-- highestLevel 决定无尽模式是否可用；select-mode 再原样交给 App.vue 统一处理页面跳转。 -->
       <ChallengeModes :highest-level="highestLevel" @select-mode="$emit('select-mode', $event)" />
     </section>
+
+    <button class="hub-backpack-button" type="button" data-test="hub-backpack-button" title="背包" @click="$emit('open-panel', 'inventory')">
+      <span aria-hidden="true">▣</span>
+      <span>背包</span>
+    </button>
   </main>
 </template>
 
@@ -96,5 +101,6 @@ export default {
 .challenge-panel { display: flex; flex-direction: column; justify-content: center; padding: 42px; background: transparent; }
 .challenge-panel > * { width: min(590px, 100%); align-self: center; }
 .challenge-panel h1 { margin: 0 0 18px; font-size: 21px; }
-@media (max-width: 700px) { .game-hub { grid-template-columns: 1fr; } .profile-panel { min-height: 160px; padding: 28px 20px; border-right: 0; border-bottom: 1px solid #3d659a; } .challenge-panel { display: block; padding: 28px 20px; } .challenge-panel > * { width: 100%; } }
+.hub-backpack-button { position: absolute; right: 34px; bottom: 28px; z-index: 3; display: inline-flex; min-width: 88px; min-height: 38px; align-items: center; justify-content: center; gap: 7px; padding: 0 14px; border: 1px solid #71603a; border-radius: 6px; background: #0b1424e6; box-shadow: 0 8px 20px #0005; color: #e9d18a; font: inherit; font-size: 12px; cursor: pointer; }.hub-backpack-button > span:first-child { color: #d6b65b; font-size: 17px; line-height: 1; }.hub-backpack-button:hover { border-color: #b89a50; background: #17253a; color: #fff1bd; }
+@media (max-width: 700px) { .game-hub { grid-template-columns: 1fr; } .profile-panel { min-height: 160px; padding: 28px 20px; border-right: 0; border-bottom: 1px solid #3d659a; } .challenge-panel { display: block; padding: 28px 20px 84px; } .challenge-panel > * { width: 100%; } .hub-backpack-button { right: 14px; bottom: 14px; } }
 </style>

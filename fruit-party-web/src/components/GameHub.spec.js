@@ -66,4 +66,17 @@ describe('GameHub', () => {
 
     expect(wrapper.emitted('open-panel')).toEqual([['profile']])
   })
+
+  it('keeps the backpack entry fixed in the hub lower-right corner', async () => {
+    const wrapper = mount(GameHub, {
+      propsData: { player: { username: '真实玩家' }, wallet: { coins: 0, energy: 5, maxEnergy: 5 }, leaderboards: { endless: [], hard: [] } },
+    })
+
+    const backpack = wrapper.get('[data-test="hub-backpack-button"]')
+    expect(backpack.classes()).toContain('hub-backpack-button')
+    expect(wrapper.find('[data-test="backpack-button"]').exists()).toBe(false)
+
+    await backpack.trigger('click')
+    expect(wrapper.emitted('open-panel')).toEqual([['inventory']])
+  })
 })

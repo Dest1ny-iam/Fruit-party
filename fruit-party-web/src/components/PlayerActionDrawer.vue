@@ -1,26 +1,27 @@
 <template>
-  <section class="action-drawer" role="dialog" aria-modal="true" :aria-label="title">
-    <header><h2>{{ title }}</h2><button type="button" class="drawer-close" @click="$emit('close')">关闭</button></header>
-    <p v-if="error" class="drawer-error">{{ error }}</p>
-    <p v-else-if="loading" class="drawer-status">加载中…</p>
+  <div class="player-action-backdrop" data-test="player-action-backdrop" @click.self="$emit('close')">
+    <section class="player-action-dialog" data-test="player-action-dialog" role="dialog" aria-modal="true" :aria-label="title">
+      <header><h2>{{ title }}</h2><button type="button" class="drawer-close" @click="$emit('close')">关闭</button></header>
+      <p v-if="error" class="drawer-error">{{ error }}</p>
+      <p v-else-if="loading" class="drawer-status">加载中…</p>
 
-    <div v-else-if="panel === 'shop'" class="drawer-list">
+      <div v-else-if="panel === 'shop'" class="drawer-list">
       <article v-for="item in records" :key="item.id" class="drawer-card">
         <div><h3>{{ item.displayName }}</h3><p>{{ item.description }}</p></div>
         <div class="shop-action"><strong>{{ item.priceCoins }} 金币</strong><button :data-test="`buy-item-${item.id}`" type="button" @click="purchase(item)">购买 1 个</button></div>
       </article>
       <p v-if="!records.length" class="drawer-status">暂无可购买道具</p>
-    </div>
+      </div>
 
-    <div v-else-if="panel === 'notifications'" class="drawer-list">
+      <div v-else-if="panel === 'notifications'" class="drawer-list">
       <article v-for="notification in records" :key="notification.id" class="drawer-card notification-card" :class="{ 'is-read': notification.read }" @click="read(notification)">
         <div><h3><i v-if="!notification.read" aria-label="未读" />{{ notification.title }}</h3><p>{{ notification.body }}</p></div>
         <button type="button" class="delete-button" @click.stop="remove(notification)">删除</button>
       </article>
       <p v-if="!records.length" class="drawer-status">暂时没有通知</p>
-    </div>
+      </div>
 
-    <div v-else-if="panel === 'inventory'" class="drawer-list">
+      <div v-else-if="panel === 'inventory'" class="drawer-list">
       <article v-for="item in records" :key="item.itemKey" class="drawer-card inventory-card">
         <div class="inventory-copy">
           <span class="inventory-icon" aria-hidden="true">{{ itemDefinition(item.itemKey).icon || '◇' }}</span>
@@ -49,9 +50,9 @@
       </article>
       <p v-if="!records.length" class="drawer-status">背包里暂时没有道具</p>
       <p v-if="records.length" class="inventory-note">携带型道具会在下一次进入游戏时扣除；每种固定使用 1 张。</p>
-    </div>
+      </div>
 
-    <div v-else class="drawer-list">
+      <div v-else class="drawer-list">
       <article v-for="product in records" :key="product.id" class="drawer-card">
         <div><h3>{{ product.displayName }}</h3><p>{{ product.description }}</p></div>
         <div class="shop-action"><strong>{{ (product.priceCents / 100).toFixed(2) }} 元</strong><button type="button" @click="createOrder(product)">获取收款码</button></div>
@@ -62,8 +63,9 @@
         <p v-if="qrUnavailable">收款二维码暂不可用，请联系管理员更新商品二维码。</p>
         <p v-else>请在 {{ expiryLabel }} 前扫码，超时后此订单自动失效。</p>
       </section>
-    </div>
-  </section>
+      </div>
+    </section>
+  </div>
 </template>
 
 <script>
@@ -121,7 +123,9 @@ export default {
 </script>
 
 <style scoped>
-.action-drawer { position: fixed; top: 0; right: 0; z-index: 20; display: flex; flex-direction: column; width: min(460px, 100vw); height: 100vh; padding: 22px; border-left: 1px solid #354968; background: #0a1423; box-shadow: -16px 0 40px #0008; color: #edf4ff; }
-.action-drawer header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 16px; border-bottom: 1px solid #263954; }.action-drawer h2, .drawer-card h3 { margin: 0; }.action-drawer h2 { font-size: 18px; }.drawer-close, .shop-action button, .delete-button { min-height: 34px; border: 1px solid #795f2f; border-radius: 6px; background: #2b2416; color: #f1d990; font: inherit; font-size: 13px; }.drawer-close { padding: 0 11px; }.drawer-list { display: grid; gap: 10px; overflow: auto; padding: 16px 0; }.drawer-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px; border: 1px solid #263954; border-radius: 7px; background: #101c2d; }.drawer-card h3 { font-size: 15px; }.drawer-card p { margin: 6px 0 0; color: #aebed2; font-size: 13px; line-height: 1.45; }.shop-action { display: grid; flex: none; gap: 8px; text-align: right; }.shop-action strong { color: #e6c261; font-size: 13px; }.shop-action button { padding: 0 10px; }.notification-card { cursor: pointer; }.notification-card.is-read { opacity: .52; }.notification-card i { display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: #d75656; vertical-align: 2px; }.delete-button { padding: 0 8px; border-color: #624047; background: #281820; color: #eebcc3; }.drawer-status, .drawer-error { margin: 18px 0; color: #aebed2; font-size: 13px; }.drawer-error { color: #ffc4c8; }.qr-order { margin-top: auto; padding-top: 16px; text-align: center; }.qr-order img { display: block; width: min(230px, 100%); aspect-ratio: 1; margin: 0 auto 10px; background: #fff; object-fit: contain; }.qr-order p { margin: 0; color: #aebed2; font-size: 12px; }
+.player-action-backdrop { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 24px; background: #02050bb8; }
+.player-action-dialog { display: flex; flex-direction: column; width: min(620px, 100%); max-height: min(720px, calc(100vh - 48px)); padding: 22px; overflow: hidden; border: 1px solid #8d7134; border-radius: 8px; background: #0a1423; box-shadow: 0 24px 80px #000b; color: #edf4ff; }
+.player-action-dialog header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex: 0 0 auto; padding-bottom: 16px; border-bottom: 1px solid #263954; }.player-action-dialog h2, .drawer-card h3 { margin: 0; }.player-action-dialog h2 { font-size: 18px; }.drawer-close, .shop-action button, .delete-button { min-height: 34px; border: 1px solid #795f2f; border-radius: 6px; background: #2b2416; color: #f1d990; font: inherit; font-size: 13px; }.drawer-close { padding: 0 11px; }.drawer-list { display: grid; gap: 10px; min-height: 0; overflow: auto; padding: 16px 0 2px; }.drawer-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px; border: 1px solid #263954; border-radius: 7px; background: #101c2d; }.drawer-card h3 { font-size: 15px; }.drawer-card p { margin: 6px 0 0; color: #aebed2; font-size: 13px; line-height: 1.45; }.shop-action { display: grid; flex: none; gap: 8px; text-align: right; }.shop-action strong { color: #e6c261; font-size: 13px; }.shop-action button { padding: 0 10px; }.notification-card { cursor: pointer; }.notification-card.is-read { opacity: .52; }.notification-card i { display: inline-block; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: #d75656; vertical-align: 2px; }.delete-button { padding: 0 8px; border-color: #624047; background: #281820; color: #eebcc3; }.drawer-status, .drawer-error { margin: 18px 0; color: #aebed2; font-size: 13px; }.drawer-error { color: #ffc4c8; }.qr-order { margin-top: auto; padding-top: 16px; text-align: center; }.qr-order img { display: block; width: min(230px, 100%); aspect-ratio: 1; margin: 0 auto 10px; background: #fff; object-fit: contain; }.qr-order p { margin: 0; color: #aebed2; font-size: 12px; }
 .inventory-copy { display: flex; min-width: 0; align-items: center; gap: 12px; }.inventory-icon { display: grid; flex: 0 0 38px; width: 38px; height: 38px; place-items: center; border: 1px solid #4d607b; border-radius: 50%; background: #0a1423; color: #e6c261; font-size: 19px; }.inventory-copy small { display: block; margin-top: 7px; color: #e2c76e; font-size: 11px; }.inventory-action { flex: 0 0 auto; min-width: 76px; min-height: 34px; padding: 0 10px; border: 1px solid #435c7c; border-radius: 6px; background: #162640; color: #c8d7ea; font: inherit; font-size: 12px; }.inventory-action.selected { border-color: #9c7a35; background: #302713; color: #f2d375; }.inventory-action:disabled { cursor: wait; opacity: .65; }.inventory-note { margin: 2px 2px 0; color: #7f91aa; font-size: 11px; line-height: 1.5; }
+@media (max-width: 560px) { .player-action-backdrop { padding: 14px; }.player-action-dialog { max-height: calc(100vh - 28px); padding: 16px; border-radius: 7px; }.drawer-card { align-items: flex-start; gap: 10px; padding: 12px; }.drawer-card p { font-size: 12px; }.shop-action { text-align: right; }.player-action-dialog h2 { font-size: 16px; } }
 </style>

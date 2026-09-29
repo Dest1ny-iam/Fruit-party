@@ -3,6 +3,17 @@ import { describe, expect, it, vi } from 'vitest'
 import PlayerActionDrawer from './PlayerActionDrawer.vue'
 
 describe('PlayerActionDrawer', () => {
+  it('opens every player utility inside a centered modal instead of a side drawer', async () => {
+    const wrapper = mount(PlayerActionDrawer, {
+      propsData: { panel: 'shop', api: { getShopItems: vi.fn().mockResolvedValue([]) } },
+    })
+    await new Promise((resolve) => setTimeout(resolve))
+
+    expect(wrapper.get('[data-test="player-action-backdrop"]').classes()).toContain('player-action-backdrop')
+    expect(wrapper.get('[data-test="player-action-dialog"]').classes()).toContain('player-action-dialog')
+    expect(wrapper.find('.action-drawer').exists()).toBe(false)
+  })
+
   it('loads shop records from its API and sends the selected item purchase back to that API', async () => {
     const api = {
       getShopItems: vi.fn().mockResolvedValue([{ id: 7, displayName: '复活卡', description: '继续挑战。', priceCoins: 120, maxPurchaseQuantity: 99 }]),

@@ -23,10 +23,6 @@
       <span class="navigation-icon notification-icon" aria-hidden="true">◌</span>
       <span>通知</span>
     </button>
-    <button class="navigation-button" type="button" data-test="backpack-button" title="背包" @click="$emit('open-panel', 'inventory')">
-      <span class="navigation-icon" aria-hidden="true">▣</span>
-      <span>背包</span>
-    </button>
     <button class="navigation-button recharge-button" type="button" data-test="recharge-button" title="充值" @click="$emit('open-panel', 'recharge')">
       <span class="navigation-icon" aria-hidden="true">+</span>
       <span>充值</span>
