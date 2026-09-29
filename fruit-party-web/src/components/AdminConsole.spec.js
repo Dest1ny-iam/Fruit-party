@@ -208,11 +208,11 @@ describe('AdminConsole', () => {
     expect(input.element.value).toBe('777')
   })
 
-  it('applies the recharge action style after generic primary action rules', () => {
+  it('matches the publish notification button dimensions and colors', () => {
     const wrapper = mount(AdminConsole, { props: { section: 'economy' } })
 
     expect(wrapper.get('[data-test="save-prices"]').classes()).toContain('recharge-style-action')
-    expect(adminConsoleSource).toMatch(/\.primary-action\.recharge-style-action\s*\{[^}]*min-height:\s*34px[^}]*background:\s*#4b391d[^}]*color:\s*#f2d376/s)
+    expect(adminConsoleSource).toMatch(/\.primary-action\.recharge-style-action\s*\{[^}]*min-height:\s*34px[^}]*padding:\s*0 14px[^}]*background:\s*#4d391d[^}]*color:\s*#f4d779[^}]*font-size:\s*16px/s)
   })
 
   it('日志页按类型筛选，并在表格中显示操作者、对象和时间', async () => {

@@ -436,5 +436,5 @@ export default {
 .table-wrap::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
 .table-wrap::-webkit-scrollbar-corner { background: #070c15; }
 @media (max-width: 680px) { .user-filters { width: 100%; justify-content: start; }.user-filters .search-input, .user-filters .joined-search { flex: 1 1 140px; width: auto; }.pagination--fixed { align-items: flex-start; flex-direction: column; } }
-.primary-action.recharge-style-action { min-height: 34px; padding: 0 13px; border: 1px solid #8e7133; border-radius: 4px; background: #4b391d; color: #f2d376; font-weight: 700; }
+.primary-action.recharge-style-action { min-height: 34px; padding: 0 14px; border: 1px solid #a08039; border-radius: 4px; background: #4d391d; color: #f4d779; font: inherit; font-size: 16px; font-weight: 400; }
 </style>
