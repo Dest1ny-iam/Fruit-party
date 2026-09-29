@@ -6,6 +6,7 @@ describe('ChallengeModes', () => {
     const wrapper = mount(ChallengeModes, { propsData: { highestLevel: 1 } })
 
     expect(wrapper.get('[data-test="normal-button"]').text()).toContain('普通模式')
+    expect(wrapper.get('[data-test="normal-button"]').text()).toContain('十关挑战')
     expect(wrapper.get('[data-test="hard-button"]').text()).toContain('困难模式')
     expect(wrapper.get('[data-test="endless-button"]').text()).toContain('无尽模式')
   })

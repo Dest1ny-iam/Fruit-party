@@ -50,7 +50,7 @@
 export default {
   name: 'LeaderboardPanel',
   props: {
-    // 两份数组分别代表无尽分数榜和困难通关榜；由 GameHub 从数据文件传入。
+    // 两份数组均由 GameHub 从 API 返回的数据库排名传入。
     endlessPlayers: { type: Array, required: true },
     hardPlayers: { type: Array, required: true },
   },
@@ -61,7 +61,8 @@ export default {
   computed: {
     // 模板不需要写条件判断，只消费最终应当展示的玩家数组。
     activePlayers() {
-      return this.rankingMode === 'endless' ? this.endlessPlayers : this.hardPlayers
+      const players = this.rankingMode === 'endless' ? this.endlessPlayers : this.hardPlayers
+      return players.slice(0, 5)
     },
     // 副标题随榜单变化，明确两种模式使用不同的排名规则。
     rankingSubtitle() {

@@ -10,7 +10,7 @@
     >
       <span class="mode-label">NORMAL</span>
       <strong>普通模式</strong>
-      <small>五关挑战</small>
+      <small>十关挑战</small>
       <span class="fruit-icon" aria-hidden="true">🍊</span>
       <span class="arrow" aria-hidden="true">→</span>
     </button>

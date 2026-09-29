@@ -31,7 +31,7 @@ button {
 }
 
 button:not(:disabled):active { transform: translateY(1px) scale(0.985); }
-button:focus-visible, input:focus-visible { outline: 2px solid #f1ca69; outline-offset: 3px; }
+button:focus-visible { outline: 2px solid #f1ca69; outline-offset: 3px; }
 
 @keyframes surface-enter {
   from { opacity: 0; transform: translateY(10px); }

@@ -19,7 +19,7 @@ const settlement = await request('/api/game/settlements', {
   token,
   method: 'POST',
   body: JSON.stringify({
-    mode: 'normal', levelNumber: 1, fruitHits: Array(3).fill({ fruit: 'watermelon' }), hitRate: 0.82, elapsedSeconds: 20,
+    mode: 'normal', levelNumber: 1, fruitHits: Array.from({ length: 20 }, (_, index) => ({ fruit: 'kiwi', combo: index + 1 })), hitRate: 0.82, elapsedSeconds: 20,
   }),
 })
 const after = await request('/api/me/state', { token })

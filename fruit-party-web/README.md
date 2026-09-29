@@ -15,7 +15,7 @@ npm run server
 npm run dev
 ```
 
-The API listens on `http://127.0.0.1:3000`; Vite proxies `/api` requests from its development URL. The local SQLite database is created at `data/fruit-party.sqlite` and is intentionally ignored by Git.
+The API listens on `http://127.0.0.1:3000`; Vite proxies `/api` requests from its development URL. MySQL is the only persistence layer. Copy `.env.example` to a local `.env`, configure the MySQL connection, then start the API; the server creates and migrates the configured database automatically.
 
 Development seed accounts:
 

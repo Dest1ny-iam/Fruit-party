@@ -11,12 +11,44 @@ describe('calculateSettlement', () => {
       elapsedSeconds: 30,
     })
 
-    expect(result.baseScore).toBe(210)
+    expect(result.baseScore).toBe(23)
     expect(result.finalScore).toBeGreaterThan(result.baseScore)
   })
 
+  it('uses the same ten fruit values as the live game and ignores unknown fruit ids', () => {
+    const result = calculateSettlement({
+      mode: 'normal',
+      levelNumber: 1,
+      fruitHits: [
+        { fruit: 'apple' }, { fruit: 'orange' }, { fruit: 'watermelon' }, { fruit: 'banana' },
+        { fruit: 'pineapple' }, { fruit: 'kiwi' }, { fruit: 'strawberry' }, { fruit: 'dragonfruit' },
+        { fruit: 'cantaloupe' }, { fruit: 'pear' }, { fruit: 'unknown' },
+      ],
+      hitRate: 0.82,
+      elapsedSeconds: 30,
+    })
+
+    expect(result.baseScore).toBe(141)
+  })
+
+  it('applies the live game combo multipliers to the server-authoritative base score', () => {
+    const result = calculateSettlement({
+      mode: 'normal',
+      levelNumber: 1,
+      fruitHits: [
+        { fruit: 'apple', combo: 1 },
+        { fruit: 'apple', combo: 2 },
+        { fruit: 'apple', combo: 4 },
+      ],
+      hitRate: 0.82,
+      elapsedSeconds: 30,
+    })
+
+    expect(result.baseScore).toBe(51)
+  })
+
   it('caps precision gains at the configured 82 percent ceiling', () => {
-    const input = { mode: 'normal', levelNumber: 1, fruitHits: Array(10).fill({ fruit: 'mango' }), elapsedSeconds: 40 }
+    const input = { mode: 'normal', levelNumber: 1, fruitHits: Array(10).fill({ fruit: 'kiwi' }), elapsedSeconds: 40 }
     const atCeiling = calculateSettlement({ ...input, hitRate: 0.82 })
     const overCeiling = calculateSettlement({ ...input, hitRate: 1 })
 
@@ -33,7 +65,7 @@ describe('calculateSettlement', () => {
   })
 
   it('has attainable normal-mode targets for all ten levels', () => {
-    expect(levelTarget('normal', 1)).toBe(180)
+    expect(levelTarget('normal', 1)).toBe(510)
     expect(levelTarget('normal', 10)).toBeLessThan(levelTarget('hard', 10))
   })
 })

@@ -6,15 +6,17 @@
   "scripts": {
     "dev": "vite",
     "server": "node server/index.js",
+    "verify:fruit-assets": "node tools/verify-fruit-assets.mjs",
     "build": "vite build",
     "test": "vitest run"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^13.0.3",
     "cors": "^2.8.6",
+    "dotenv": "^18.0.4",
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3",
+    "mysql2": "^3.24.4",
     "three": "^0.186.1",
     "vue": "2.7.16"
   },

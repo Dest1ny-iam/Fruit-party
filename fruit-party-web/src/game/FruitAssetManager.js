@@ -1,18 +1,52 @@
-import { Vector3 } from 'three'
+import { DoubleSide, Vector3 } from 'three'
+import { FRUIT_ASSETS, FRUIT_IDS, FRUIT_VARIANTS, getFruitModelPath } from './fruit-assets.js'
 
-export const FRUIT_MODEL_NAMES = Object.freeze({
-  watermelon: '西瓜',
-  apple: '苹果',
-  orange: '橙子',
-  kiwi: '猕猴桃',
-  mango: '芒果',
-  lemon: '柠檬',
+export const FRUIT_MODEL_NAMES = Object.freeze(Object.fromEntries(
+  FRUIT_IDS.map((fruit) => [fruit, FRUIT_ASSETS[fruit].directory]),
+))
+
+const CUT_MATERIAL_COLORS = Object.freeze({
+  watermelon: { flesh: '#ef2b47', rind: '#1d642d' },
+  apple: { flesh: '#f7e2ad', rind: '#8a190c' },
+  orange: { flesh: '#ff7a1a', rind: '#b83f05' },
+  kiwi: { flesh: '#6fa645', rind: '#5f321a' },
+  mango: { flesh: '#f2a329', rind: '#75410a' },
+  lemon: { flesh: '#f2d13a', rind: '#ae860b' },
 })
-
-const VARIANTS = ['whole', 'halfA', 'halfB']
 
 function asVector3(value) {
   return value?.isVector3 ? value.clone() : new Vector3(value?.x || 0, value?.y || 0, value?.z || 0)
+}
+
+function cloneMaterial(material) {
+  return Array.isArray(material) ? material.map((item) => item.clone()) : material.clone()
+}
+
+function restoreCutMaterials(half, whole, fruit) {
+  const colors = CUT_MATERIAL_COLORS[fruit]
+  const outerMaterials = new Map()
+  whole.traverse((node) => {
+    if (node.isMesh && !node.name.startsWith('Fruit_')) outerMaterials.set(node.name, node.material)
+  })
+  half.traverse((node) => {
+    if (!node.isMesh) return
+    if (node.name === 'Fruit_flesh') {
+      node.material = cloneMaterial(node.material)
+      node.material.color.set(colors.flesh)
+      node.material.side = DoubleSide
+      node.material.needsUpdate = true
+      return
+    }
+    if (node.name === 'Fruit_rind') {
+      node.material = cloneMaterial(node.material)
+      node.material.color.set(colors.rind)
+      node.material.side = DoubleSide
+      node.material.needsUpdate = true
+      return
+    }
+    const sourceMaterial = outerMaterials.get(node.name)
+    if (sourceMaterial) node.material = cloneMaterial(sourceMaterial)
+  })
 }
 
 export class FruitAssetManager {
@@ -26,13 +60,23 @@ export class FruitAssetManager {
   }
 
   modelUrl(fruit, variant) {
-    const directory = FRUIT_MODEL_NAMES[fruit]
-    if (!directory || !VARIANTS.includes(variant)) throw new Error(`Unknown fruit asset: ${fruit}/${variant}`)
-    return `${this.assetBaseUrl}/${directory}/${variant}.glb`
+    return getFruitModelPath(fruit, variant, { assetBaseUrl: this.assetBaseUrl })
   }
 
-  async preload(fruits = Object.keys(FRUIT_MODEL_NAMES)) {
-    await Promise.all(fruits.flatMap((fruit) => VARIANTS.map((variant) => this.load(fruit, variant))))
+  async preload(fruits = FRUIT_IDS) {
+    await Promise.all(fruits.flatMap((fruit) => FRUIT_VARIANTS.map((variant) => this.load(fruit, variant))))
+  }
+
+  async preloadAvailable(fruits = FRUIT_IDS) {
+    const available = await Promise.all(fruits.map(async (fruit) => {
+      try {
+        await this.preload([fruit])
+        return fruit
+      } catch {
+        return null
+      }
+    }))
+    return available.filter(Boolean)
   }
 
   async load(fruit, variant) {
@@ -70,8 +114,11 @@ export class FruitAssetManager {
     const halves = [templateA, templateB].map((template, index) => {
       const half = template.clone(true)
       const side = index === 0 ? 1 : -1
+      restoreCutMaterials(half, whole, whole.userData.fruit)
       half.position.copy(whole.position).addScaledVector(splitDirection, side * 0.12)
       half.quaternion.copy(whole.quaternion)
+      // Open just enough to reveal the central cap without turning it edge-on.
+      half.rotateY(index === 0 ? 0.42 : -0.42)
       half.scale.copy(whole.scale)
       half.userData = {
         ...half.userData,
