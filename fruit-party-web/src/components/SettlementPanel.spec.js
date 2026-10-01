@@ -18,6 +18,22 @@ describe('SettlementPanel', () => {
     expect(actions.map((button) => button.attributes('data-test'))).toEqual(['return-hub', 'next-level'])
   })
 
+  it('gives an uncleared failed level a retry action and a LOSS result mark', () => {
+    const wrapper = mount(SettlementPanel, { propsData: { mode: 'normal', finalScore: 280, targetScore: 340, passed: false, canAdvance: false } })
+
+    expect(wrapper.get('[data-test="result-mark"]').text()).toBe('LOSS')
+    expect(wrapper.get('[data-test="retry-level"]').text()).toBe('再来一次')
+    expect(wrapper.find('[data-test="next-level"]').exists()).toBe(false)
+  })
+
+  it('keeps next-level navigation after replaying an already cleared level', () => {
+    const wrapper = mount(SettlementPanel, { propsData: { mode: 'hard', finalScore: 280, targetScore: 560, passed: false, canAdvance: true } })
+
+    expect(wrapper.get('[data-test="result-mark"]').text()).toBe('LOSS')
+    expect(wrapper.get('[data-test="next-level"]').text()).toBe('下一关')
+    expect(wrapper.find('[data-test="retry-level"]').exists()).toBe(false)
+  })
+
   it('restores the complete server-authoritative score breakdown for campaign modes', () => {
     const wrapper = mount(SettlementPanel, {
       propsData: {

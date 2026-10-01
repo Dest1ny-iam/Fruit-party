@@ -42,6 +42,28 @@ describe('API client', () => {
     expect(fetcher.mock.calls[1][1]).toMatchObject({ method: 'POST', body: JSON.stringify({ itemId: 2, quantity: 3, requestId: 'request-001' }) })
   })
 
+  it('maps session-bound endless item and revive calls', async () => {
+    const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: {}, error: null }) })
+    const client = createApiClient({ fetcher, getToken: () => 'signed-token' })
+
+    await client.activateGameItem('session/1', 'bomb-shield')
+    await client.reviveGameSession('session/1')
+
+    expect(fetcher.mock.calls.map(([path]) => path)).toEqual([
+      '/api/game/sessions/session%2F1/items/bomb-shield/activate',
+      '/api/game/sessions/session%2F1/revive',
+    ])
+    expect(fetcher.mock.calls[0][1]).toMatchObject({ method: 'POST' })
+  })
+
+  it('maps the paged wallet ledger endpoint', async () => {
+    const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: { items: [], page: 2, pageSize: 10, total: 0 }, error: null }) })
+    const client = createApiClient({ fetcher, getToken: () => 'signed-token' })
+
+    await expect(client.getWalletLedger({ page: 2, pageSize: 10 })).resolves.toMatchObject({ page: 2, pageSize: 10 })
+    expect(fetcher).toHaveBeenCalledWith('/api/me/wallet/ledger?page=2&pageSize=10', expect.any(Object))
+  })
+
   it('maps administrative reads and mutations to the MySQL API contract', async () => {
     const fetcher = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: [], error: null }) })
     const client = createApiClient({ fetcher, getToken: () => 'admin-token' })

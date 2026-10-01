@@ -40,7 +40,7 @@
       <ThreeFruitScene
         ref="threeScene"
         :fruits="fruits"
-        :paused="isExitConfirmationOpen || revivePromptOpen"
+        :paused="isExitConfirmationOpen || revivePromptOpen || maintenanceEnabled"
         @ready="threeSupported = true"
         @unsupported="threeSupported = false"
         @fruit-sliced="handleFruitSliced"
@@ -90,6 +90,9 @@
           </div>
         </div>
       </section>
+      <section v-if="maintenanceEnabled" class="maintenance-overlay" data-test="maintenance-overlay" role="status" aria-live="assertive">
+        <div class="maintenance-dialog"><p>服务维护中</p><strong>本局已暂停</strong><span>维护结束后会继续当前挑战，请稍候。</span></div>
+      </section>
     </section>
   </main>
 </template>
@@ -105,7 +108,7 @@ import { scoreForFruit } from '../game/scoreRules'
 export default {
   name: 'GameBoard',
   components: { ThreeFruitScene, EndlessItemDock },
-  emits: ['finished', 'revive-requested'],
+  emits: ['finished', 'revive-requested', 'item-activation-requested'],
   props: {
     // 父组件传入当前关卡；组件只读取 number 和 targetScore 来显示 HUD。
     level: {
@@ -113,10 +116,12 @@ export default {
       required: true,
     },
     activeItems: { type: Array, default: () => [] },
+    sessionId: { type: String, default: '' },
     mode: { type: String, default: 'normal' },
     // 复活时由 App 带回上一段游戏状态；未传入时就是一局全新的游戏。
     initialRound: { type: Object, default: null },
     reviveCount: { type: Number, default: 0 },
+    maintenanceEnabled: { type: Boolean, default: false },
   },
   data() {
     const roundSeconds = this.mode === 'endless' ? Number.POSITIVE_INFINITY : roundSecondsForLevel(this.level.number) + (this.activeItems.includes('time-plus') ? 10 : 0)
@@ -167,6 +172,7 @@ export default {
       revivePromptOpen: false,
       reviveRequestPending: false,
       reviveError: '',
+      itemActivationPending: false,
       reviveUses: resumed.reviveUses || 0,
       pendingEndReason: '',
     }
@@ -211,7 +217,7 @@ export default {
   methods: {
     // 生成一波水果，并让每个水果使用不同的甩入方向。
     spawnWave() {
-      if (this.isExitConfirmationOpen || this.revivePromptOpen || this.isGameOver) return
+      if (this.isExitConfirmationOpen || this.revivePromptOpen || this.maintenanceEnabled || this.isGameOver) return
       const difficulty = difficultyForWave(this.waveCount, { level: this.level.number, mode: this.mode })
       const fruitConfigs = fruitsForWave(this.waveCount, this.level.number, this.mode)
       const fruitsInWave = fruitConfigs.map((config, offset) => {
@@ -257,7 +263,7 @@ export default {
     },
     // 游戏规则是“滑过即切”，这里不检查鼠标按键，直接把坐标交给 3D 场景做碰撞检测。
     sliceWithoutClick(event) {
-      if (this.isExitConfirmationOpen || this.revivePromptOpen || this.isGameOver) return
+      if (this.isExitConfirmationOpen || this.revivePromptOpen || this.maintenanceEnabled || this.isGameOver) return
       const rect = event.currentTarget.getBoundingClientRect()
       this.cursor = { x: event.clientX - rect.left, y: event.clientY - rect.top, visible: true }
       this.isSlicing = true
@@ -281,7 +287,7 @@ export default {
       const gainedScore = scoreForFruit(config.score, this.currentCombo, scoreBoost)
       this.score += gainedScore
       this.slicedCount += 1
-      this.fruitHits.push({ fruit: type, combo: this.currentCombo, scoreBoost })
+      this.fruitHits.push({ fruit: type, combo: this.currentCombo, scoreBoost, elapsedSeconds: this.elapsedSeconds })
       this.fruits = this.fruits.filter((fruit) => fruit.id !== id)
       const comboMessage = this.currentCombo > 1 ? ` · ${this.currentCombo} 连击` : ''
       this.showFeedback(`+${gainedScore} ${config.name}${comboMessage}`, 700)
@@ -325,7 +331,7 @@ export default {
       this.showFeedback('炸弹命中 -25 · 时间 -2s', 900)
     },
     tickGameClock() {
-      if (this.isExitConfirmationOpen || this.revivePromptOpen || this.hasFinished) return
+      if (this.isExitConfirmationOpen || this.revivePromptOpen || this.maintenanceEnabled || this.hasFinished) return
       this.tickActiveItems()
       if (this.mode === 'endless') {
         this.elapsedSeconds += 1
@@ -429,9 +435,25 @@ export default {
     activateEndlessItem(itemId) {
       if (this.mode !== 'endless' || !this.activeItems.includes(itemId) || this.usedActiveItems.includes(itemId)) return
       if (!['bomb-shield', 'score-boost'].includes(itemId)) return
-      this.usedActiveItems = [...this.usedActiveItems, itemId]
-      this.activeItemSeconds = { ...this.activeItemSeconds, [itemId]: 20 }
-      this.showFeedback(`${itemId === 'bomb-shield' ? '炸弹削减' : '分数 ×1.2'} · 20s`, 900)
+      if (this.itemActivationPending) return
+      if (this.sessionId) {
+        this.itemActivationPending = true
+        this.$emit('item-activation-requested', itemId)
+        return
+      }
+      this.confirmItemActivation({ itemKey: itemId, durationSeconds: 20 })
+    },
+    confirmItemActivation({ itemKey, durationSeconds = 20, activeUntil } = {}) {
+      if (!['bomb-shield', 'score-boost'].includes(itemKey)) return
+      const seconds = activeUntil ? Math.max(1, Math.ceil((new Date(activeUntil).valueOf() - Date.now()) / 1000)) : Number(durationSeconds)
+      this.itemActivationPending = false
+      this.usedActiveItems = [...this.usedActiveItems, itemKey]
+      this.activeItemSeconds = { ...this.activeItemSeconds, [itemKey]: seconds }
+      this.showFeedback(`${itemKey === 'bomb-shield' ? '炸弹削减' : '分数 ×1.2'} · ${seconds}s`, 900)
+    },
+    rejectItemActivation(message) {
+      this.itemActivationPending = false
+      this.showFeedback(message || '道具使用失败，请稍后重试', 1200)
     },
     tickActiveItems() {
       const next = { ...this.activeItemSeconds }
@@ -486,6 +508,7 @@ h1 { margin: 0; font-size: 25px; }
 .game-over span { color: #c7d2e3; font-size: 13px; }
 .exit-confirmation { position: absolute; z-index: 8; inset: 0; display: grid; place-items: center; padding: 20px; background: #040913b8; backdrop-filter: blur(5px); }.exit-confirmation-dialog { width: min(390px, 100%); padding: 24px; border: 1px solid #4a5e7d; border-top: 3px solid #c79543; background: #101a2a; box-shadow: 0 22px 60px #000c; text-align: center; }.exit-confirmation-kicker { margin: 0 0 8px; color: #d4aa5c; font-size: 11px; font-weight: 700; letter-spacing: 1px; }.exit-confirmation h2 { margin: 0; color: #f3f6fc; font-size: 21px; }.exit-confirmation-dialog > p:not(.exit-confirmation-kicker) { margin: 10px 0 20px; color: #aebbd0; font-size: 13px; line-height: 1.6; }.exit-confirmation-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }.exit-confirmation-actions button { min-height: 42px; border-radius: 4px; font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }.continue-game-button { border: 1px solid #55769a; background: #18304b; color: #e2efff; }.confirm-exit-button { border: 1px solid #754b4b; background: #2a1c24; color: #e9b4ba; }.exit-confirmation-actions button:hover { filter: brightness(1.12); }.exit-confirmation-actions button:focus-visible { outline: 2px solid #f5d66d; outline-offset: 3px; }
 .revive-dialog { border-top-color: #d8b65e; }.revive-error { margin: -10px 0 14px !important; color: #ffc4c8 !important; }.exit-confirmation-actions button:disabled { cursor: wait; opacity: .62; }
+.maintenance-overlay { position: absolute; z-index: 20; inset: 0; display: grid; place-items: center; padding: 20px; background: #040913c9; backdrop-filter: blur(5px); }.maintenance-dialog { display: grid; gap: 8px; width: min(320px, 100%); padding: 24px; border: 1px solid #9f7935; border-radius: 8px; background: #101d31; box-shadow: 0 18px 50px #000b; text-align: center; }.maintenance-dialog p { margin: 0; color: #d5b55e; font-size: 11px; letter-spacing: 1.2px; }.maintenance-dialog strong { color: #f4f7ff; font-size: 21px; }.maintenance-dialog span { color: #9cafc9; font-size: 12px; line-height: 1.6; }
 .game-board.is-slicing { border-color: #d8b65e; box-shadow: inset 0 0 60px #02050d, 0 0 22px #d8b65e55; }
 .game-board.is-slicing .slice-state { color: #f8d36f; }
 @media (max-width: 700px) { .game-page { padding: 16px; } .game-header { align-items: start; flex-direction: column; gap: 12px; } .game-header-actions { width: 100%; justify-content: space-between; gap: 10px; } .game-stats { flex-wrap: wrap; gap: 9px 14px; } .exit-game-button { flex: 0 0 auto; min-height: 32px; padding: 0 10px; } .exit-confirmation-dialog { padding: 21px 18px; }.exit-confirmation-actions { grid-template-columns: 1fr; }.game-board { min-height: calc(100vh - 170px); } .game-fruit { font-size: 58px; } }

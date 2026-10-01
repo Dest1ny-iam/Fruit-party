@@ -12,8 +12,8 @@ export const FRUIT_SCORES = Object.freeze({
 })
 
 // 目标分来自当前水果目录、关卡时长和命中率预算；达到配置命中率时可过关，完美局保留余量。
-const NORMAL_TARGETS = [510, 640, 900, 1150, 2100, 2260, 2440, 2600, 2730, 2790]
-const HARD_TARGETS = [1340, 1720, 2240, 2620, 3180, 3380, 3580, 3680, 3860, 3960]
+const NORMAL_TARGETS = [340, 400, 480, 570, 720, 860, 1020, 1190, 1380, 1580]
+const HARD_TARGETS = [560, 680, 820, 980, 1160, 1380, 1620, 1880, 2180, 2500]
 
 export function levelTarget(mode, levelNumber) {
   const targets = mode === 'hard' ? HARD_TARGETS : NORMAL_TARGETS
@@ -47,13 +47,20 @@ export function calculateSettlement({ mode, levelNumber, fruitHits, hitRate, ela
     return total + scoreForFruit(fruitScore, combo, scoreBoost)
   }, 0)
   const cappedHitRate = clamp(Number(hitRate) || 0, 0, 0.82)
-  const precisionRatio = cappedHitRate / 0.82
+  const accuracyFactor = clamp((cappedHitRate - 0.25) / 0.57, 0, 1)
+  const averageCombo = validHits.length > 0
+    ? validHits.reduce((total, hit) => total + clamp(Number(hit?.combo) || 1, 1, 10), 0) / validHits.length
+    : 1
+  const comboFactor = clamp((averageCombo - 1) / 5, 0, 1)
   const elapsed = Math.max(0, Number(elapsedSeconds) || 0)
-  const timeRatio = mode === 'endless' ? clamp(1 - Math.max(0, elapsed - 45) / 435, 0.4, 1) : 1
-  const performanceScore = Math.round(baseScore * 0.5 * precisionRatio * timeRatio)
+  const endlessEfficiency = mode === 'endless' ? clamp(1 - Math.max(0, elapsed - 45) / 435, 0.4, 1) : 0
+  const tempoBonus = mode === 'endless' ? 0.08 * endlessEfficiency : 0.04
+  const modeBonus = mode === 'hard' ? 0.04 : 0
+  const rawPerformance = baseScore * (0.08 + 0.16 * accuracyFactor + 0.10 * comboFactor + tempoBonus + modeBonus)
+  const performanceScore = Math.min(Math.round(rawPerformance), Math.floor(baseScore * 0.45))
   const finalScore = baseScore + performanceScore
   const targetScore = mode === 'endless' ? null : levelTarget(mode, levelNumber)
-  const passed = targetScore === null ? null : finalScore >= targetScore
+  const passed = targetScore === null ? null : baseScore >= targetScore
 
   return {
     baseScore,

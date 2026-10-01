@@ -14,19 +14,19 @@ export const FRUIT_TYPES = Object.freeze([
 ])
 
 export const FRUIT_CATALOG = Object.freeze({
-  apple: Object.freeze({ type: 'apple', name: '苹果', emoji: '🍎', score: 15, scale: 1.08, size: 'medium', juice: 0xd93345 }),
-  orange: Object.freeze({ type: 'orange', name: '橙子', emoji: '🍊', score: 16, scale: 1.03, size: 'medium', juice: 0xff982b }),
+  apple: Object.freeze({ type: 'apple', name: '苹果', emoji: '🍎', score: 15, scale: 0.88, sizeTier: 'B', size: 'medium', juice: 0xd93345 }),
+  orange: Object.freeze({ type: 'orange', name: '橙子', emoji: '🍊', score: 16, scale: 0.88, sizeTier: 'B', size: 'medium', juice: 0xff982b }),
   // 西瓜仍是显著最大的目标，但略缩小以避免遮挡同一波其他水果。
-  watermelon: Object.freeze({ type: 'watermelon', name: '西瓜', emoji: '🍉', score: 8, scale: 1.65, size: 'large', juice: 0xf04455 }),
-  banana: Object.freeze({ type: 'banana', name: '香蕉', emoji: '🍌', score: 13, scale: 1.20, size: 'medium', juice: 0xffe06b }),
-  pineapple: Object.freeze({ type: 'pineapple', name: '菠萝', emoji: '🍍', score: 12, scale: 1.32, size: 'medium', juice: 0xf2c84c }),
-  kiwi: Object.freeze({ type: 'kiwi', name: '猕猴桃', emoji: '🥝', score: 20, scale: 0.78, size: 'small', juice: 0x8bbf45 }),
-  strawberry: Object.freeze({ type: 'strawberry', name: '草莓', emoji: '🍓', score: 19, scale: 0.84, size: 'small', juice: 0xe7354f }),
-  dragonfruit: Object.freeze({ type: 'dragonfruit', name: '火龙果', emoji: '🐉', score: 14, scale: 1.26, size: 'medium', juice: 0xea4d8e }),
+  watermelon: Object.freeze({ type: 'watermelon', name: '西瓜', emoji: '🍉', score: 8, scale: 1.15, sizeTier: 'A', size: 'large', juice: 0xf04455 }),
+  banana: Object.freeze({ type: 'banana', name: '香蕉', emoji: '🍌', score: 13, scale: 0.88, sizeTier: 'B', size: 'medium', juice: 0xffe06b }),
+  pineapple: Object.freeze({ type: 'pineapple', name: '菠萝', emoji: '🍍', score: 12, scale: 0.88, sizeTier: 'B', size: 'medium', juice: 0xf2c84c }),
+  kiwi: Object.freeze({ type: 'kiwi', name: '猕猴桃', emoji: '🥝', score: 20, scale: 0.68, sizeTier: 'C', size: 'small', juice: 0x8bbf45 }),
+  strawberry: Object.freeze({ type: 'strawberry', name: '草莓', emoji: '🍓', score: 19, scale: 0.68, sizeTier: 'C', size: 'small', juice: 0xe7354f }),
+  dragonfruit: Object.freeze({ type: 'dragonfruit', name: '火龙果', emoji: '🐉', score: 14, scale: 0.88, sizeTier: 'B', size: 'medium', juice: 0xea4d8e }),
   // 哈密瓜是仅次于西瓜的大型目标：略缩小后仍保留更易命中的低分定位。
-  cantaloupe: Object.freeze({ type: 'cantaloupe', name: '哈密瓜', emoji: '🍈', score: 9, scale: 1.46, size: 'large', juice: 0xf0a45e }),
+  cantaloupe: Object.freeze({ type: 'cantaloupe', name: '哈密瓜', emoji: '🍈', score: 9, scale: 1.15, sizeTier: 'A', size: 'large', juice: 0xf0a45e }),
   // 梨保持中型，刚好填补菠萝与苹果之间的视觉和分值层级。
-  pear: Object.freeze({ type: 'pear', name: '梨', emoji: '🍐', score: 15, scale: 1.18, size: 'medium', juice: 0xd9c45a }),
+  pear: Object.freeze({ type: 'pear', name: '梨', emoji: '🍐', score: 15, scale: 0.88, sizeTier: 'B', size: 'medium', juice: 0xd9c45a }),
 })
 
 const SMALL_FRUIT_TYPES = Object.freeze(['kiwi', 'strawberry'])

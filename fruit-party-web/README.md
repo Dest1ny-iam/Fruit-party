@@ -29,13 +29,23 @@ Run automated verification:
 ```bash
 npm test
 npm run build
+npm run verify:fruit-assets
 ```
 
 For a running API, `node server/live-smoke.mjs` creates a short-lived test player, completes normal level 1 through the API, and verifies level 2 is unlocked.
 
-## 3D fruit assets
+## 3D fruit rendering
 
-Place the Polyhaven/Blender GLB exports below `public/models`:
+The deployed game uses the built-in procedural Three.js fruit models in `src/game/FruitModelFactory.js`. It does not require external GLB files, so the project can be deployed with the current repository contents.
+
+`FruitAssetManager.js` and `FruitScene.vue` are retained as an optional photorealistic GLB experiment. Missing optional files are reported by the verification command but do not block deployment. To make GLB assets mandatory for a future release, run:
+
+```powershell
+$env:REQUIRE_GLTF_ASSETS='1'
+npm run verify:fruit-assets
+```
+
+Place optional Polyhaven/Blender GLB exports below `public/models`:
 
 ```text
 public/models/

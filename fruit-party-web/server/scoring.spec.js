@@ -65,7 +65,34 @@ describe('calculateSettlement', () => {
   })
 
   it('has attainable normal-mode targets for all ten levels', () => {
-    expect(levelTarget('normal', 1)).toBe(510)
+    expect(levelTarget('normal', 1)).toBe(340)
+    expect(levelTarget('normal', 5)).toBe(720)
     expect(levelTarget('normal', 10)).toBeLessThan(levelTarget('hard', 10))
+  })
+
+  it('caps performance score below half of the verified base score', () => {
+    const result = calculateSettlement({
+      mode: 'normal',
+      levelNumber: 1,
+      fruitHits: Array.from({ length: 20 }, (_, index) => ({ fruit: 'kiwi', combo: index + 1 })),
+      hitRate: 0.82,
+      elapsedSeconds: 20,
+    })
+
+    expect(result.performanceScore).toBeLessThanOrEqual(Math.floor(result.baseScore * 0.45))
+  })
+
+  it('uses base score rather than a performance bonus to decide a level pass', () => {
+    const result = calculateSettlement({
+      mode: 'normal',
+      levelNumber: 1,
+      fruitHits: Array.from({ length: 20 }, () => ({ fruit: 'apple' })),
+      hitRate: 0.82,
+      elapsedSeconds: 20,
+    })
+
+    expect(result.baseScore).toBeLessThan(result.targetScore)
+    expect(result.finalScore).toBeGreaterThanOrEqual(result.targetScore)
+    expect(result.passed).toBe(false)
   })
 })

@@ -95,7 +95,14 @@ export default {
   },
   async mounted() { await this.reload() },
   methods: {
-    async reload() { this.products = await this.loader() },
+    async reload() {
+      try {
+        const result = await this.loader()
+        this.products = Array.isArray(result) ? result : (result?.items || [])
+      } catch (error) {
+        this.errorMessage = error?.message || '充值商品刷新失败，已保留上次数据'
+      }
+    },
     resetDraft() { this.draft = emptyDraft(); this.errorMessage = ''; this.feedback = ''; this.drawerOpen = true },
     editProduct(product) { this.draft = { benefitName: '', ...product }; this.errorMessage = ''; this.feedback = ''; this.drawerOpen = true },
     async toggleProduct(product) {

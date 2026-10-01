@@ -15,11 +15,18 @@ const registered = await request('/api/auth/register', {
 if (registered.status !== 201) throw new Error(`Registration failed: ${JSON.stringify(registered.body)}`)
 const token = registered.body.data.token
 const before = await request('/api/me/state', { token })
+const entry = await request('/api/game/entries', {
+  token,
+  method: 'POST',
+  body: JSON.stringify({ mode: 'normal', levelNumber: 1 }),
+})
+if (entry.status !== 201) throw new Error(`Game entry failed: ${JSON.stringify(entry.body)}`)
 const settlement = await request('/api/game/settlements', {
   token,
   method: 'POST',
   body: JSON.stringify({
-    mode: 'normal', levelNumber: 1, fruitHits: Array.from({ length: 20 }, (_, index) => ({ fruit: 'kiwi', combo: index + 1 })), hitRate: 0.82, elapsedSeconds: 20,
+    sessionId: entry.body.data.sessionId,
+    fruitHits: Array.from({ length: 20 }, (_, index) => ({ fruit: 'kiwi', combo: index + 1 })), hitRate: 0.82, elapsedSeconds: 20,
   }),
 })
 const after = await request('/api/me/state', { token })

@@ -89,6 +89,10 @@ export async function createDatabase({ databaseName = process.env.MYSQL_DATABASE
     await pool.query('ALTER TABLE users ADD COLUMN tester_mode_enabled TINYINT(1) NOT NULL DEFAULT 0 AFTER is_tester')
     await pool.query("UPDATE users SET tester_mode_enabled = 1 WHERE username = 'tester' AND is_tester = 1")
   }
+  const [settlementResultColumn] = await pool.query("SHOW COLUMNS FROM game_sessions LIKE 'settlement_result'")
+  if (!settlementResultColumn.length) await pool.query('ALTER TABLE game_sessions ADD COLUMN settlement_result JSON NULL AFTER settlement_nonce')
+  const [itemIconColumn] = await pool.query("SHOW COLUMNS FROM item_catalog LIKE 'icon'")
+  if (!itemIconColumn.length) await pool.query('ALTER TABLE item_catalog ADD COLUMN icon VARCHAR(255) NULL AFTER description')
 
   const shouldDropOnDestroy = dropOnDestroy ?? databaseName.startsWith('fruit_party_test_')
   return {

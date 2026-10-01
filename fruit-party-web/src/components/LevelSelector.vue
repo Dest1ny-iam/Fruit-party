@@ -7,9 +7,9 @@
     </header>
 
     <!-- 只展示服务端已解锁的关卡，下一关会在本关通关后实时出现。 -->
-    <section class="level-grid" aria-label="闯关关卡">
+    <section class="level-grid" data-test="level-grid" aria-label="闯关关卡" @wheel.prevent="handleWheel">
       <button
-        v-for="level in visibleLevels"
+        v-for="level in pagedLevels"
         :key="level.levelNumber"
         class="level-button"
         type="button"
@@ -26,6 +26,11 @@
         <span class="level-action">{{ hasPlayed(level) ? '再次挑战' : '开始挑战' }}</span>
       </button>
     </section>
+    <nav v-if="pageCount > 1" class="level-pagination" data-test="level-pagination" aria-label="关卡分页">
+      <button type="button" data-test="level-page-previous" :disabled="currentPage === 1" @click="goToPage(currentPage - 1)">上一页</button>
+      <span>第 {{ currentPage }} / {{ pageCount }} 页</span>
+      <button type="button" data-test="level-page-next" :disabled="currentPage === pageCount" @click="goToPage(currentPage + 1)">下一页</button>
+    </nav>
   </main>
 </template>
 
@@ -39,14 +44,29 @@ export default {
     // 内测账号保留直接选关能力；普通账号只能看到已通关进度之后的下一关。
     allowAllLevels: { type: Boolean, default: false },
   },
+  data() {
+    return { currentPage: 1 }
+  },
+  watch: {
+    levels: { deep: true, handler() { this.currentPage = Math.min(this.currentPage, this.pageCount) } },
+    mode() { this.currentPage = 1 },
+  },
   computed: {
     visibleLevels() {
       const orderedLevels = [...this.levels].sort((left, right) => Number(left.levelNumber) - Number(right.levelNumber))
       if (this.allowAllLevels) return orderedLevels.filter((level) => level.unlocked)
       return orderedLevels.filter((level, index) => level.unlocked && (index === 0 || Boolean(orderedLevels[index - 1].completedAt)))
     },
+    pageCount() { return Math.max(1, Math.ceil(this.visibleLevels.length / 9)) },
+    pagedLevels() { return this.visibleLevels.slice((this.currentPage - 1) * 9, this.currentPage * 9) },
   },
   methods: {
+    goToPage(page) { this.currentPage = Math.max(1, Math.min(this.pageCount, page)) },
+    handleWheel(event) {
+      if (this.pageCount < 2) return
+      if (event.deltaY > 0) this.goToPage(this.currentPage + 1)
+      if (event.deltaY < 0) this.goToPage(this.currentPage - 1)
+    },
     hasPlayed(level) {
       return Number(level.bestScore) > 0 || Boolean(level.completedAt)
     },
@@ -71,8 +91,8 @@ h1 { margin: 0; font-size: 27px; }
 .back-button { min-height: 34px; padding: 0 12px; border: 1px solid #58719a; border-radius: 5px; background: transparent; color: #dce8f8; }
 .back-button:hover { border-color: #ffd36a; color: #ffd36a; }
 
-.level-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; max-width: 760px; margin: 0 auto; }
-.level-button { min-height: 158px; padding: 18px; border: 1px solid #506991; border-radius: 7px; background: #172b4d; color: #f7f9ff; text-align: left; animation: surface-enter 320ms ease both; }
+.level-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-auto-rows: 220px; gap: 14px; width: min(1100px, 100%); margin: 0 auto; overscroll-behavior: contain; }
+.level-button { min-width: 0; height: 220px; padding: 18px; border: 1px solid #506991; border-radius: 7px; background: #172b4d; color: #f7f9ff; text-align: left; animation: surface-enter 320ms ease both; }
 .level-button:hover:not(:disabled) { border-color: #dfb752; background: #1d365e; box-shadow: 0 12px 20px #02091573; transform: translateY(-3px); }
 .hard-mode .level-button { border-color: #713f4a; background: #1c1a21; }
 .hard-mode .level-button:hover:not(:disabled) { border-color: #b76068; background: #282027; }
@@ -89,4 +109,7 @@ h1 { margin: 0; font-size: 27px; }
 .hard-mode .level-action { color: #dd8990; }
 .level-button:disabled { border-color: #415575; background: #10203c; color: #8fa1bb; cursor: not-allowed; }
 .level-button:disabled small { color: #8fa1bb; }
+.level-pagination { display: flex; align-items: center; justify-content: center; gap: 14px; width: min(1100px, 100%); margin: 18px auto 0; }.level-pagination button { min-width: 70px; min-height: 34px; padding: 0 12px; border: 1px solid #58719a; border-radius: 5px; background: #10203c; color: #dce8f8; font: inherit; }.level-pagination button:hover:not(:disabled) { border-color: #ffd36a; color: #ffd36a; }.level-pagination button:disabled { cursor: default; opacity: .38; }.level-pagination span { min-width: 88px; color: #aebed2; font-size: 13px; text-align: center; }
+@media (max-width: 760px) { .level-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 500px) { .level-page { padding: 24px 16px; }.level-grid { grid-template-columns: 1fr; grid-auto-rows: 190px; }.level-button { height: 190px; } }
 </style>

@@ -32,16 +32,22 @@ export async function validateFruitAssets({ modelsDirectory } = {}) {
   return { expected, missing, valid: missing.length === 0 }
 }
 
+export async function verifyFruitAssetRequirement({ modelsDirectory, requireGlbAssets = false } = {}) {
+  const result = await validateFruitAssets({ modelsDirectory })
+  return { ...result, valid: requireGlbAssets ? result.valid : true, requireGlbAssets }
+}
+
 async function main() {
-  const result = await validateFruitAssets()
-  if (result.valid) {
+  const result = await verifyFruitAssetRequirement({ requireGlbAssets: process.env.REQUIRE_GLTF_ASSETS === '1' })
+  if (result.missing.length === 0) {
     console.log(`Fruit assets ready: ${result.expected.length} GLB files.`)
     return
   }
 
-  console.error(`Missing ${result.missing.length} of ${result.expected.length} fruit GLB files:`)
-  for (const asset of result.missing) console.error(`- ${asset.fruit}/${asset.variant}: ${asset.path}`)
-  process.exitCode = 1
+  const output = result.requireGlbAssets ? console.error : console.log
+  output(`${result.missing.length} optional GLB files are unavailable; the deployed game uses procedural Three.js fruit models.`)
+  for (const asset of result.missing) output(`- ${asset.fruit}/${asset.variant}: ${asset.path}`)
+  if (!result.valid) process.exitCode = 1
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main()

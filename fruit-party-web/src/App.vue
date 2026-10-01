@@ -26,7 +26,7 @@
     :section="adminSection"
     :maintenance-enabled="maintenanceEnabled"
     @navigate="adminSection = $event"
-    @maintenance-change="maintenanceEnabled = $event"
+    @maintenance-change="toggleMaintenance"
     @logout="logout"
   />
   <!--
@@ -53,7 +53,7 @@
     :energy="playerState.wallet?.energy || 0"
     :highest-level="playerState.progress.normal.highestUnlockedLevel"
     :highest-hard-level="playerState.progress.hard.highestUnlockedLevel"
-    :coin-ledger="[]"
+    :coin-ledger="walletLedger.items"
     @back="screen = 'hub'"
     @avatar-change="updateProfile({ avatarUrl: $event })"
     @username-change="updateProfile({ username: $event })"
@@ -65,7 +65,7 @@
     @back="screen = 'hub'"：点击返回大厅时直接修改 screen。
   -->
   <LevelSelector v-else-if="screen === 'levels'" :levels="playerState.progress[currentMode].levels" :mode="currentMode" :allow-all-levels="Boolean(playerState.privileges?.unlockAllLevels)" @back="screen = 'hub'" @start="startLevel" />
-  <GameBoard v-else-if="screen === 'game'" ref="gameBoard" :level="currentLevel" :mode="currentMode" :active-items="currentGameEntry?.activeItems || []" :revive-count="reviveCount" @finished="finishGame" @revive-requested="useReviveCard" />
+  <GameBoard v-else-if="screen === 'game'" ref="gameBoard" :level="currentLevel" :mode="currentMode" :session-id="currentGameEntry?.sessionId || ''" :active-items="currentGameEntry?.activeItems || []" :revive-count="reviveCount" :maintenance-enabled="maintenanceEnabled" @finished="finishGame" @revive-requested="useReviveCard" @item-activation-requested="activateGameItem" />
   <SettlementPanel
     v-else-if="screen === 'settlement'"
     :mode="currentSettlement.mode"
@@ -78,8 +78,10 @@
     :elapsed-seconds="currentSettlement.elapsedSeconds"
     :coins-awarded="currentSettlement.coinsAwarded"
     :passed="currentSettlement.passed === true"
+    :can-advance="settlementCanAdvance"
     @return-hub="screen = 'hub'"
     @next-level="startNextLevel"
+    @retry-level="retryCurrentLevel"
   />
   <PlayerActionDrawer
     v-if="activePanel"
@@ -151,6 +153,7 @@ export default {
       energyClock: null,
       adminSection: 'overview',
       maintenanceEnabled: false,
+      walletLedger: { items: [], page: 1, pageSize: 20, total: 0 },
     }
   },
   methods: {
@@ -184,7 +187,12 @@ export default {
               this.authError = ''
               this.accountDisabledNotice = true
             },
+            () => {},
+            (status) => { this.maintenanceEnabled = Boolean(status?.enabled) },
           )
+        }
+        if (typeof this.api.getSystemStatus === 'function') {
+          try { this.maintenanceEnabled = Boolean((await this.api.getSystemStatus())?.enabled) } catch { /* SSE will provide the next update */ }
         }
         this.screen = (response.player?.role || state.player.role) === 'admin' ? 'admin' : 'hub'
       } catch (error) {
@@ -251,6 +259,7 @@ export default {
       try {
         const hitRate = round.appearedCount > 0 ? round.slicedCount / round.appearedCount : 0
         const settlement = await this.api.settleGame({
+          sessionId: this.currentGameEntry?.sessionId,
           mode: round.mode,
           levelNumber: round.mode === 'endless' ? undefined : round.level,
           fruitHits: round.fruitHits,
@@ -267,11 +276,22 @@ export default {
     },
     async useReviveCard() {
       try {
-        await this.api.useInventoryItem('revive-card')
+        if (this.currentGameEntry?.sessionId && typeof this.api.reviveGameSession === 'function') await this.api.reviveGameSession(this.currentGameEntry.sessionId)
+        else await this.api.useInventoryItem('revive-card')
         await this.refreshPlayerState()
         this.$refs.gameBoard?.resumeAfterRevive()
       } catch (error) {
         this.$refs.gameBoard?.rejectRevive(error.message || '复活卡使用失败，请稍后重试')
+      }
+    },
+    async activateGameItem(itemKey) {
+      try {
+        if (this.currentGameEntry?.sessionId && typeof this.api.activateGameItem === 'function') {
+          const result = await this.api.activateGameItem(this.currentGameEntry.sessionId, itemKey)
+          this.$refs.gameBoard?.confirmItemActivation(result)
+        } else this.$refs.gameBoard?.confirmItemActivation({ itemKey, durationSeconds: 20 })
+      } catch (error) {
+        this.$refs.gameBoard?.rejectItemActivation(error.message || '道具使用失败，请稍后重试')
       }
     },
     async startNextLevel() {
@@ -280,9 +300,15 @@ export default {
       if (nextLevel?.unlocked) await this.startLevel(nextLevel)
       else this.screen = 'levels'
     },
+    async retryCurrentLevel() {
+      const level = this.playerState.progress[this.currentMode]?.levels?.find((entry) => entry.levelNumber === this.currentSettlement?.levelNumber)
+      if (level) await this.startLevel(level)
+      else this.screen = 'levels'
+    },
     openPlayerPanel(panel) {
       if (panel === 'profile') {
         this.screen = 'profile'
+        this.refreshWalletLedger()
         return
       }
       this.activePanel = panel
@@ -303,8 +329,23 @@ export default {
     async refreshPlayerState() {
       try { this.playerState = await this.api.getPlayerState() } catch { /* SSE reconnect or next navigation will retry */ }
     },
+    async refreshWalletLedger() {
+      try { this.walletLedger = await this.api.getWalletLedger({ page: 1, pageSize: 20 }) } catch { /* profile keeps the last known ledger */ }
+    },
     async setTestingMode(enabled) {
       try { this.playerState = await this.api.setTestingMode(enabled) } catch (error) { this.authError = error.message || '无法切换内测特权' }
+    },
+    async toggleMaintenance(enabled) {
+      if (typeof this.api.updateAdminMaintenance !== 'function') {
+        this.maintenanceEnabled = enabled
+        return
+      }
+      try {
+        const status = await this.api.updateAdminMaintenance({ enabled })
+        this.maintenanceEnabled = Boolean(status.enabled)
+      } catch (error) {
+        this.authError = error.message || '维护状态更新失败，请稍后重试'
+      }
     },
     logout() {
       localStorage.removeItem('fruit-party-token')
@@ -326,6 +367,12 @@ export default {
     },
     reviveCount() {
       return Number(this.playerState.inventory?.find((item) => item.itemKey === 'revive-card')?.quantity || 0)
+    },
+    settlementCanAdvance() {
+      if (!this.currentSettlement || this.currentSettlement.mode === 'endless') return false
+      if (this.currentSettlement.passed) return true
+      const level = this.playerState.progress[this.currentSettlement.mode]?.levels?.find((entry) => entry.levelNumber === this.currentSettlement.levelNumber)
+      return Boolean(level?.completedAt)
     },
   },
   mounted() {

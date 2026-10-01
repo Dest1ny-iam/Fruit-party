@@ -18,10 +18,16 @@ async function register(prefix) {
 }
 
 async function settleFirstLevel(token) {
+  const entry = await api('/api/game/entries', {
+    token,
+    method: 'POST',
+    body: JSON.stringify({ mode: 'normal', levelNumber: 1 }),
+  })
+  if (entry.status !== 201) throw new Error(`Game entry failed: ${JSON.stringify(entry.body)}`)
   return api('/api/game/settlements', {
     token,
     method: 'POST',
-    body: JSON.stringify({ mode: 'normal', levelNumber: 1, fruitHits: Array.from({ length: 20 }, (_, index) => ({ fruit: 'kiwi', combo: index + 1 })), hitRate: 0.82, elapsedSeconds: 20 }),
+    body: JSON.stringify({ sessionId: entry.body.data.sessionId, fruitHits: Array.from({ length: 20 }, (_, index) => ({ fruit: 'kiwi', combo: index + 1 })), hitRate: 0.82, elapsedSeconds: 20 }),
   })
 }
 
@@ -59,10 +65,10 @@ if (after.some((state) => state.body.data.progress.normal.highestUnlockedLevel !
 const adminLogin = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ username: 'admin', password: 'Admin123', acceptedTerms: true }) })
 const candidates = await api('/api/admin/players', { token: adminLogin.body.data.token })
 const firstCandidate = candidates.body.data.find((player) => player.username === first.username)
-await api(`/api/admin/players/${firstCandidate.id}/status`, { token: adminLogin.body.data.token, method: 'PATCH', body: JSON.stringify({ disabled: true }) })
+const disabled = await api(`/api/admin/players/${firstCandidate.id}/status`, { token: adminLogin.body.data.token, method: 'PATCH', body: JSON.stringify({ disabled: true }) })
 const disabledSession = await api('/api/me/state', { token: first.token })
-const refreshedCandidates = await api('/api/admin/players', { token: adminLogin.body.data.token })
-if (disabledSession.status !== 403 || refreshedCandidates.body.data.some((player) => player.username === first.username)) {
+const permissionCandidates = await api('/api/admin/permissions', { token: adminLogin.body.data.token })
+if (disabled.status !== 200 || disabledSession.status !== 403 || permissionCandidates.body.data.items.some((player) => player.username === first.username)) {
   throw new Error('Disabled account remained active')
 }
 

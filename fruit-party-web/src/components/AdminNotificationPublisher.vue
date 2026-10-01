@@ -100,7 +100,12 @@ export default {
   methods: {
     async reload() {
       this.loading = true
-      try { this.publications = await this.loader() } finally { this.loading = false }
+      try {
+        const result = await this.loader()
+        this.publications = Array.isArray(result) ? result : (result?.items || [])
+      } catch (error) {
+        this.errorMessage = error?.message || '通知列表刷新失败，已保留上次数据'
+      } finally { this.loading = false }
     },
     readRate(item) {
       if (!item?.recipientCount) return '0%'

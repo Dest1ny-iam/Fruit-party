@@ -156,6 +156,17 @@ function normalizeCutGroup(group, targetSize) {
   group.updateMatrixWorld(true)
 }
 
+// 切片在展开前已经带有倾斜角度。以旋转后的可见外接尺寸二次定标，
+// 才能和命中前的整果保持同一视觉直径。
+function matchCutVisualEnvelope(group, targetSize) {
+  group.updateMatrixWorld(true)
+  const box = new THREE.Box3().setFromObject(group)
+  const size = box.getSize(new THREE.Vector3())
+  const visibleSize = Math.max(size.x, size.y, size.z)
+  if (visibleSize > 0) group.scale.multiplyScalar(targetSize / visibleSize)
+  group.updateMatrixWorld(true)
+}
+
 function createBananaCutFace(piece, curve, endT, profile) {
   // TubeGeometry 不带端盖；这里在内侧端点补一张垂直于香蕉轴线的切面。
   // 皮圈、果肉和浅色芯共面，避免出现多余的“脱皮台阶”。
@@ -234,7 +245,7 @@ function createSlicedHalf(type, direction) {
     const bananaPiece = createBananaTransverse(direction, profile)
     normalizeCutGroup(bananaPiece, sliceScale)
     bananaPiece.position.set(direction * 0.1 * sliceScale, direction * 0.045 * sliceScale, 0.06 + direction * 0.02)
-    bananaPiece.userData.keepShape = false
+    bananaPiece.userData.keepShape = true
     bananaPiece.userData.velocity = new THREE.Vector3(direction * 0.5, 0.42 + (direction > 0 ? 0.08 : 0), direction * 0.07)
     bananaPiece.userData.spin = new THREE.Vector3(1.4 * direction, 1.1, 1.8 * direction)
     return bananaPiece
@@ -288,11 +299,12 @@ function createSlicedHalf(type, direction) {
 
   // 切片和完整水果使用同一外接盒目标尺寸，避免半球原始半径导致切开后整体缩小。
   normalizeCutGroup(piece, sliceScale)
+  piece.rotation.set(-0.12, direction * 0.12, direction * 0.18)
+  matchCutVisualEnvelope(piece, sliceScale)
   // 位移也按尺寸增长，西瓜和哈密瓜切开后能保持自然的分离距离。
   piece.position.set(direction * 0.16 * sliceScale, direction * 0.035 * sliceScale, 0.06)
-  piece.rotation.set(-0.12, direction * 0.12, direction * 0.18)
   // 火龙果需要保持平整半球切面，不能在飞散过程中翻到侧面。
-  piece.userData.keepShape = type === 'dragonfruit'
+  piece.userData.keepShape = true
   piece.userData.velocity = new THREE.Vector3(direction * 0.5, 0.42 + (direction > 0 ? 0.08 : 0), direction * 0.07)
   piece.userData.spin = new THREE.Vector3(1.4 * direction, 1.1, 1.8 * direction)
   return piece

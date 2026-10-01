@@ -29,6 +29,27 @@ describe('PlayerActionDrawer', () => {
     expect(wrapper.emitted('wallet-changed')).toHaveLength(1)
   })
 
+  it('shows six compact shop cards per page and pages later items', async () => {
+    const records = Array.from({ length: 7 }, (_, index) => ({
+      id: index + 1,
+      displayName: `道具 ${index + 1}`,
+      description: '道具说明',
+      priceCoins: 100,
+    }))
+    const wrapper = mount(PlayerActionDrawer, {
+      propsData: { panel: 'shop', api: { getShopItems: vi.fn().mockResolvedValue(records) } },
+    })
+    await new Promise((resolve) => setTimeout(resolve))
+
+    expect(wrapper.findAll('[data-test^="shop-card-"]')).toHaveLength(6)
+    expect(wrapper.text()).toContain('第 1 / 2 页')
+    expect(wrapper.text()).not.toContain('道具 7')
+
+    await wrapper.get('[data-test="shop-next-page"]').trigger('click')
+    expect(wrapper.findAll('[data-test^="shop-card-"]')).toHaveLength(1)
+    expect(wrapper.text()).toContain('道具 7')
+  })
+
   it('shows all inventory items and supports direct use or next-round selection', async () => {
     const api = {
       getInventory: vi.fn().mockResolvedValue([

@@ -94,6 +94,9 @@ export default {
         this.players = result.items.map((player) => ({ ...player }))
         this.page = result.page
         this.total = result.total
+      } catch (error) {
+        this.feedback = error?.message || '权限列表刷新失败，已保留上次数据'
+        this.feedbackIsError = true
       } finally {
         this.loading = false
       }

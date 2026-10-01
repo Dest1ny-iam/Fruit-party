@@ -21,7 +21,7 @@ function recoverEnergy(user, now) {
   }
 }
 
-async function readInventoryRow(transaction, userId, itemKey) {
+export async function readInventoryRow(transaction, userId, itemKey) {
   const [row] = await transaction.query(`
     SELECT i.user_id AS userId, i.quantity, c.id AS itemId, c.item_key AS itemKey,
            c.display_name AS displayName
@@ -33,7 +33,7 @@ async function readInventoryRow(transaction, userId, itemKey) {
   return row
 }
 
-async function consumeInventory(transaction, userId, itemId, quantity = 1) {
+export async function consumeInventory(transaction, userId, itemId, quantity = 1) {
   await transaction.execute(
     'UPDATE player_inventory SET quantity = quantity - ? WHERE user_id = ? AND item_id = ? AND quantity >= ?',
     [quantity, userId, itemId, quantity],
@@ -95,6 +95,8 @@ export async function consumeGameItemsInTransaction(transaction, { userId, mode,
   if (uniqueKeys.some((key) => !GAME_ITEM_KEYS.has(key))) throw new BusinessError(422, 'INVALID_ITEMS', '该道具不能在进入游戏时使用')
   if (uniqueKeys.includes('time-plus') && mode === 'endless') throw new BusinessError(422, 'ITEM_NOT_ALLOWED', '无尽模式不能使用延时卡')
   for (const itemKey of uniqueKeys) {
+    // 复活卡绑定到本局，但只在服务端确认每次复活时扣除，避免进入后直接退出也消耗库存。
+    if (itemKey === 'revive-card') continue
     const inventory = await readInventoryRow(transaction, userId, itemKey)
     await consumeInventory(transaction, userId, inventory.itemId)
   }

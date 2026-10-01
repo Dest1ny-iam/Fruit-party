@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { BusinessError } from './economy.js'
-import { consumeGameItemsInTransaction } from './items.js'
+import { consumeGameItemsInTransaction, consumeInventory, readInventoryRow } from './items.js'
 
 function requirePositiveInteger(value, code, message) {
   if (!Number.isInteger(value) || value < 1) throw new BusinessError(422, code, message)
@@ -78,6 +78,12 @@ export async function enterGame(database, { userId, mode, levelNumber, itemKeys 
     const itemResult = await consumeGameItemsInTransaction(transaction, { userId, mode, itemKeys })
     const sessionId = randomUUID()
     await transaction.execute('INSERT INTO game_sessions (id, user_id, mode, level_number) VALUES (?, ?, ?, ?)', [sessionId, userId, mode, mode === 'endless' ? null : levelNumber])
+    for (const itemKey of itemResult.activeItems) {
+      await transaction.execute(`
+        INSERT INTO game_session_items (session_id, user_id, item_key, allowed_uses)
+        VALUES (?, ?, ?, 1)
+      `, [sessionId, userId, itemKey])
+    }
     return {
       sessionId,
       chargedEnergy: hasFreeEntry ? 0 : 1,
@@ -85,6 +91,82 @@ export async function enterGame(database, { userId, mode, levelNumber, itemKeys 
       maxEnergy: Number(player.maxEnergy),
       energyRecoveryStartedAt: nextRecoveryStartedAt?.toISOString() ?? null,
       activeItems: itemResult.activeItems,
+    }
+  })
+}
+
+function requireSessionId(sessionId) {
+  if (typeof sessionId !== 'string' || !sessionId.trim()) throw new BusinessError(422, 'SESSION_REQUIRED', '缺少有效的游戏场次')
+  return sessionId.trim()
+}
+
+async function lockGameSession(transaction, { userId, sessionId }) {
+  const normalizedSessionId = requireSessionId(sessionId)
+  const [session] = await transaction.query(`
+    SELECT id, user_id AS userId, mode, level_number AS levelNumber, status
+    FROM game_sessions WHERE id = ? FOR UPDATE
+  `, [normalizedSessionId])
+  if (!session) throw new BusinessError(404, 'GAME_SESSION_NOT_FOUND', '游戏场次不存在')
+  if (Number(session.userId) !== Number(userId)) throw new BusinessError(403, 'GAME_SESSION_FORBIDDEN', '无权操作该游戏场次')
+  if (session.status !== 'active') throw new BusinessError(409, 'GAME_SESSION_CLOSED', '游戏场次已关闭')
+  return session
+}
+
+export async function activateGameSessionItem(database, { userId, sessionId, itemKey, now = new Date() }) {
+  requirePositiveInteger(userId, 'INVALID_USER', '无效玩家')
+  if (!['bomb-shield', 'score-boost'].includes(itemKey)) throw new BusinessError(422, 'INVALID_ITEM', '该道具不能主动使用')
+  const currentTime = new Date(now)
+  return database.transaction(async (transaction) => {
+    const session = await lockGameSession(transaction, { userId, sessionId })
+    if (session.mode !== 'endless') throw new BusinessError(422, 'ITEM_NOT_ALLOWED', '主动道具只适用于无尽模式')
+    const [item] = await transaction.query(`
+      SELECT item_key AS itemKey, allowed_uses AS allowedUses, used_count AS usedCount, active_until AS activeUntil
+      FROM game_session_items WHERE session_id = ? AND item_key = ? FOR UPDATE
+    `, [session.id, itemKey])
+    if (!item) throw new BusinessError(409, 'ITEM_NOT_CARRIED', '本局没有携带该道具')
+    if (Number(item.usedCount) >= Number(item.allowedUses)) throw new BusinessError(409, 'ITEM_ALREADY_USED', '该道具本局已经使用过')
+    await transaction.execute(`
+      UPDATE game_session_items
+      SET used_count = used_count + 1, active_until = DATE_ADD(?, INTERVAL 20 SECOND)
+      WHERE session_id = ? AND item_key = ? AND used_count < allowed_uses
+    `, [currentTime, session.id, itemKey])
+    const [updated] = await transaction.query('SELECT active_until AS activeUntil, allowed_uses AS allowedUses, used_count AS usedCount FROM game_session_items WHERE session_id = ? AND item_key = ?', [session.id, itemKey])
+    const activeUntil = updated?.activeUntil ? new Date(updated.activeUntil) : new Date(currentTime.valueOf() + 20 * 1000)
+    return {
+      sessionId: session.id,
+      itemKey,
+      durationSeconds: 20,
+      activeUntil: activeUntil.toISOString(),
+      remainingUses: Math.max(0, Number(updated?.allowedUses || 0) - Number(updated?.usedCount || 0)),
+    }
+  })
+}
+
+export async function reviveGameSession(database, { userId, sessionId, now = new Date() }) {
+  requirePositiveInteger(userId, 'INVALID_USER', '无效玩家')
+  const currentTime = new Date(now)
+  return database.transaction(async (transaction) => {
+    const session = await lockGameSession(transaction, { userId, sessionId })
+    const allowedUses = session.mode === 'endless' ? 3 : 1
+    let [usage] = await transaction.query(`
+      SELECT allowed_uses AS allowedUses, used_count AS usedCount
+      FROM game_session_items WHERE session_id = ? AND item_key = 'revive-card' FOR UPDATE
+    `, [session.id])
+    if (!usage) {
+      await transaction.execute('INSERT INTO game_session_items (session_id, user_id, item_key, allowed_uses) VALUES (?, ?, \'revive-card\', ?)', [session.id, userId, allowedUses])
+      usage = { allowedUses, usedCount: 0 }
+    }
+    if (Number(usage.usedCount) >= Number(usage.allowedUses)) throw new BusinessError(409, 'REVIVE_LIMIT_REACHED', `本局最多使用 ${allowedUses} 张复活卡`)
+    const inventory = await readInventoryRow(transaction, userId, 'revive-card')
+    await consumeInventory(transaction, userId, inventory.itemId)
+    await transaction.execute('UPDATE game_session_items SET used_count = used_count + 1, updated_at = ? WHERE session_id = ? AND item_key = ?', [currentTime, session.id, 'revive-card'])
+    const usedCount = Number(usage.usedCount) + 1
+    return {
+      sessionId: session.id,
+      itemKey: 'revive-card',
+      usedCount,
+      allowedUses: Number(usage.allowedUses),
+      remainingUses: Math.max(0, Number(usage.allowedUses) - usedCount),
     }
   })
 }
@@ -181,5 +263,90 @@ export async function createRechargeOrder(database, { userId, productId, now = n
     await transaction.execute("UPDATE recharge_orders SET status = 'expired' WHERE user_id = ? AND status = 'pending' AND expires_at <= ?", [userId, now])
     await transaction.execute('INSERT INTO recharge_orders (order_no, user_id, product_id, qr_code_url, expires_at) VALUES (?, ?, ?, ?, ?)', [orderNo, userId, productId, product.qrCodeUrl, expiresAt])
     return { orderNo, productId, status: 'pending', qrCodeUrl: product.qrCodeUrl, expiresAt: expiresAt.toISOString() }
+  })
+}
+
+function parseRechargeBenefits(value) {
+  const benefits = typeof value === 'string' ? JSON.parse(value) : value
+  if (Number.isFinite(Number(benefits?.coins))) return { benefitType: 'coins', benefitAmount: Math.max(1, Math.round(Number(benefits.coins))), benefitName: '' }
+  return {
+    benefitType: benefits?.benefitType,
+    benefitAmount: Math.max(1, Math.round(Number(benefits?.benefitAmount) || 1)),
+    benefitName: String(benefits?.benefitName || '').trim(),
+  }
+}
+
+export async function readRechargeOrder(database, { userId, orderNo, isAdmin = false, now = new Date() }) {
+  requirePositiveInteger(userId, 'INVALID_PLAYER', '无效玩家')
+  if (typeof orderNo !== 'string' || !orderNo.trim()) throw new BusinessError(422, 'INVALID_ORDER', '无效订单号')
+  const result = await database.transaction(async (transaction) => {
+    const [order] = await transaction.query(`
+    SELECT o.order_no AS orderNo, o.user_id AS userId, o.product_id AS productId, o.status,
+           o.qr_code_url AS qrCodeUrl, o.expires_at AS expiresAt, o.paid_at AS paidAt,
+           p.display_name AS displayName, p.price_cents AS priceCents, p.benefits
+    FROM recharge_orders o JOIN recharge_products p ON p.id = o.product_id
+    WHERE o.order_no = ?
+    `, [orderNo.trim()])
+    if (!order || (!isAdmin && Number(order.userId) !== Number(userId))) throw new BusinessError(404, 'ORDER_NOT_FOUND', '充值订单不存在')
+    if (order.status === 'pending' && new Date(order.expiresAt).valueOf() <= new Date(now).valueOf()) {
+      await transaction.execute("UPDATE recharge_orders SET status = 'expired' WHERE order_no = ? AND status = 'pending'", [order.orderNo])
+      order.status = 'expired'
+    }
+    return order
+  })
+  return { ...result, benefits: parseRechargeBenefits(result.benefits), expiresAt: new Date(result.expiresAt).toISOString(), paidAt: result.paidAt ? new Date(result.paidAt).toISOString() : null }
+}
+
+export async function cancelRechargeOrder(database, { userId, orderNo }) {
+  requirePositiveInteger(userId, 'INVALID_PLAYER', '无效玩家')
+  if (typeof orderNo !== 'string' || !orderNo.trim()) throw new BusinessError(422, 'INVALID_ORDER', '无效订单号')
+  return database.transaction(async (transaction) => {
+    const [order] = await transaction.query('SELECT order_no AS orderNo, user_id AS userId, status FROM recharge_orders WHERE order_no = ? FOR UPDATE', [orderNo.trim()])
+    if (!order || Number(order.userId) !== Number(userId)) throw new BusinessError(404, 'ORDER_NOT_FOUND', '充值订单不存在')
+    if (order.status === 'cancelled') return { orderNo: order.orderNo, status: 'cancelled', replayed: true }
+    if (order.status !== 'pending') throw new BusinessError(409, 'ORDER_NOT_CANCELLABLE', '订单当前不可取消')
+    await transaction.execute("UPDATE recharge_orders SET status = 'cancelled' WHERE order_no = ? AND status = 'pending'", [order.orderNo])
+    return { orderNo: order.orderNo, status: 'cancelled', replayed: false }
+  })
+}
+
+export async function confirmRechargeOrder(database, { adminId, orderNo, now = new Date() }) {
+  requirePositiveInteger(adminId, 'INVALID_ADMIN', '无效管理员')
+  if (typeof orderNo !== 'string' || !orderNo.trim()) throw new BusinessError(422, 'INVALID_ORDER', '无效订单号')
+  return database.transaction(async (transaction) => {
+    const [order] = await transaction.query(`
+      SELECT o.order_no AS orderNo, o.user_id AS userId, o.status, o.expires_at AS expiresAt,
+             p.benefits, p.display_name AS displayName, p.price_cents AS priceCents
+      FROM recharge_orders o JOIN recharge_products p ON p.id = o.product_id
+      WHERE o.order_no = ? FOR UPDATE
+    `, [orderNo.trim()])
+    if (!order) throw new BusinessError(404, 'ORDER_NOT_FOUND', '充值订单不存在')
+    if (order.status === 'paid') return { orderNo: order.orderNo, status: 'paid', granted: true, replayed: true }
+    if (order.status !== 'pending') throw new BusinessError(409, 'ORDER_NOT_PAYABLE', '订单当前不可确认')
+    if (new Date(order.expiresAt).valueOf() <= new Date(now).valueOf()) {
+      await transaction.execute("UPDATE recharge_orders SET status = 'expired' WHERE order_no = ? AND status = 'pending'", [order.orderNo])
+      throw new BusinessError(409, 'ORDER_EXPIRED', '充值订单已过期')
+    }
+    const [player] = await transaction.query('SELECT id, coins, energy, max_energy AS maxEnergy FROM users WHERE id = ? AND is_disabled = 0 FOR UPDATE', [order.userId])
+    if (!player) throw new BusinessError(404, 'PLAYER_NOT_FOUND', '玩家不存在或已被禁用')
+    const benefits = parseRechargeBenefits(order.benefits)
+    if (!['coins', 'energy', 'item', 'permanent-free-entry'].includes(benefits.benefitType)) throw new BusinessError(422, 'UNSUPPORTED_BENEFIT', '该充值权益暂不支持自动发放')
+    if (benefits.benefitType === 'coins') {
+      const coins = Number(player.coins) + benefits.benefitAmount
+      await transaction.execute('UPDATE users SET coins = ? WHERE id = ?', [coins, player.id])
+      await transaction.execute(`INSERT INTO wallet_ledger (user_id, transaction_type, reference_type, reference_id, coins_delta, balance_after) VALUES (?, 'recharge', 'recharge_order', ?, ?, ?)`, [player.id, order.orderNo, benefits.benefitAmount, coins])
+    } else if (benefits.benefitType === 'energy') {
+      const energy = Math.min(Number(player.maxEnergy), Number(player.energy) + benefits.benefitAmount)
+      await transaction.execute('UPDATE users SET energy = ?, energy_recovery_started_at = IF(energy >= max_energy, NULL, energy_recovery_started_at) WHERE id = ?', [energy, player.id])
+    } else if (benefits.benefitType === 'item') {
+      const [item] = await transaction.query('SELECT id FROM item_catalog WHERE item_key = ? AND enabled = 1 FOR UPDATE', [benefits.benefitName])
+      if (!item) throw new BusinessError(404, 'BENEFIT_ITEM_NOT_FOUND', '充值权益道具不存在')
+      await transaction.execute('INSERT INTO player_inventory (user_id, item_id, quantity) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)', [player.id, item.id, benefits.benefitAmount])
+    } else {
+      await transaction.execute(`INSERT INTO player_privileges (user_id, infinite_energy, granted_by, granted_at, revoked_at) VALUES (?, 1, ?, CURRENT_TIMESTAMP, NULL) ON DUPLICATE KEY UPDATE infinite_energy = 1, granted_by = VALUES(granted_by), granted_at = CURRENT_TIMESTAMP, revoked_at = NULL`, [player.id, adminId])
+    }
+    await transaction.execute("UPDATE recharge_orders SET status = 'paid', paid_at = CURRENT_TIMESTAMP WHERE order_no = ?", [order.orderNo])
+    await transaction.execute("INSERT INTO admin_audit_logs (admin_id, action, target_type, target_id, details) VALUES (?, 'confirm_recharge', 'recharge_order', ?, ?)", [adminId, order.orderNo, JSON.stringify({ userId: player.id, benefits })])
+    return { orderNo: order.orderNo, status: 'paid', granted: true, replayed: false }
   })
 }

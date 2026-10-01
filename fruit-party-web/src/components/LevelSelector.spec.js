@@ -72,4 +72,24 @@ describe('LevelSelector', () => {
     expect(level.text()).toContain('尚未挑战')
     expect(level.text()).toContain('开始挑战')
   })
+
+  it('uses fixed nine-card pages and switches pages through clicks or the mouse wheel', async () => {
+    const levels = Array.from({ length: 10 }, (_, index) => ({
+      levelNumber: index + 1,
+      targetScore: 300 + index * 100,
+      unlocked: true,
+      completedAt: index === 0 ? '2026-09-28T10:00:00.000Z' : null,
+    }))
+    const wrapper = mount(LevelSelector, { propsData: { levels, allowAllLevels: true } })
+
+    expect(wrapper.findAll('.level-button')).toHaveLength(9)
+    expect(wrapper.get('[data-test="level-pagination"]').text()).toContain('第 1 / 2 页')
+
+    await wrapper.get('[data-test="level-page-next"]').trigger('click')
+    expect(wrapper.findAll('.level-button')).toHaveLength(1)
+    expect(wrapper.find('[data-test="level-10"]').exists()).toBe(true)
+
+    await wrapper.get('[data-test="level-grid"]').trigger('wheel', { deltaY: -120 })
+    expect(wrapper.findAll('.level-button')).toHaveLength(9)
+  })
 })

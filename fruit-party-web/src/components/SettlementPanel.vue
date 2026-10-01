@@ -1,9 +1,10 @@
 <template>
   <main class="settlement-page" :class="{ 'endless-mode': isEndless }" data-test="settlement-page">
     <section class="settlement-card" aria-labelledby="settlement-title">
-      <header class="settlement-header">
+      <header class="settlement-header" :class="{ 'is-win': passed, 'is-loss': !passed && !isEndless }">
+        <div v-if="!isEndless" class="result-status" data-test="result-status"><span data-test="result-mark">{{ passed ? 'WIN' : 'LOSS' }}</span><small>{{ passed ? '通关成功' : '挑战失败' }}</small></div>
         <p class="settlement-kicker">{{ isEndless ? '无尽模式' : `${modeLabel}模式 · 第 ${levelNumber} 关` }}</p>
-        <h1 id="settlement-title">{{ isEndless ? '无尽结算' : (passed ? '本局结算' : '挑战失败') }}</h1>
+        <h1 id="settlement-title">{{ isEndless ? '无尽结算' : (passed ? '挑战成功' : '本局结算') }}</h1>
       </header>
       <section v-if="isEndless" class="score-panel endless-score-panel" data-test="endless-score-breakdown" aria-label="无尽最终分数">
         <p class="endless-time">本局用时 {{ formattedElapsedTime }}</p>
@@ -32,10 +33,11 @@
           </strong>
         </article>
       </section>
-      <p class="settlement-caption">{{ isEndless ? '本局成绩已记录，继续挑战下一次极限。' : (passed ? '下一关已经解锁' : '再试一次，突破目标分数') }}</p>
+      <p class="settlement-caption">{{ isEndless ? '本局成绩已记录，继续挑战下一次极限。' : (passed ? '下一关已经解锁' : (canAdvance ? '本关已通过过，可直接进入下一关' : '再来一次，突破目标分数')) }}</p>
       <div class="settlement-actions" :class="{ 'is-endless': isEndless }" data-test="settlement-actions">
         <button class="settlement-button secondary" type="button" data-test="return-hub" @click="$emit('return-hub')">返回大厅</button>
-        <button v-if="!isEndless && passed" class="settlement-button primary" type="button" data-test="next-level" @click="$emit('next-level')">下一关</button>
+        <button v-if="!isEndless && (passed || canAdvance)" class="settlement-button primary" type="button" data-test="next-level" @click="$emit('next-level')">下一关</button>
+        <button v-else-if="!isEndless" class="settlement-button primary retry-button" type="button" data-test="retry-level" @click="$emit('retry-level')">再来一次</button>
       </div>
     </section>
   </main>
@@ -45,7 +47,7 @@
 export default {
   name: 'SettlementPanel',
   props: {
-    mode: { type: String, required: true }, levelNumber: { type: Number, default: 1 }, finalScore: { type: Number, required: true }, baseScore: { type: Number, default: 0 }, performanceScore: { type: Number, default: 0 }, targetScore: { type: Number, default: 0 }, hitRate: { type: Number, default: 0 }, elapsedSeconds: { type: Number, default: 0 }, coinsAwarded: { type: Number, default: 0 }, passed: { type: Boolean, default: false },
+    mode: { type: String, required: true }, levelNumber: { type: Number, default: 1 }, finalScore: { type: Number, required: true }, baseScore: { type: Number, default: 0 }, performanceScore: { type: Number, default: 0 }, targetScore: { type: Number, default: 0 }, hitRate: { type: Number, default: 0 }, elapsedSeconds: { type: Number, default: 0 }, coinsAwarded: { type: Number, default: 0 }, passed: { type: Boolean, default: false }, canAdvance: { type: Boolean, default: false },
   },
   data() { return { displayedScore: 0, displayedBaseScore: 0, displayedPerformanceScore: 0, animationFrame: null, animationTimer: null } },
   computed: {
@@ -78,4 +80,5 @@ export default {
 .settlement-caption { margin: 18px 0 22px; color: #9aafc5; font-size: 13px; text-align: center; }.settlement-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }.settlement-actions.is-endless { grid-template-columns: minmax(170px, 240px); justify-content: center; }.settlement-button { min-height: 42px; border-radius: 4px; font: inherit; font-weight: 700; cursor: pointer; }.settlement-button.secondary { border: 1px solid #5b7393; background: #12243b; color: #dce7f4; }.settlement-button.primary { border: 1px solid #ca9d42; background: #9f742b; color: #fff7df; }
 .endless-mode .settlement-card { border-color: #64562d; }.endless-score-panel { border-color: #806a31; background: #171c26; }.endless-time { margin: 0; color: #b3c2d2; font-size: 12px; }.endless-score-equation { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 11px; }.score-line { display: grid; gap: 3px; justify-items: center; }.score-line span { color: #aebfd3; font-size: 11px; }.score-line strong { color: #f5d36d; font-size: 31px; }.performance-line strong { color: #93d4fb; }.score-operator { color: #d5b65e; font-size: 22px; }.score-total { display: grid; justify-items: center; gap: 5px; width: min(420px, 100%); padding-top: 12px; border-top: 1px solid #806a31; }.score-total span { color: #bdc9d5; font-size: 12px; }.score-total strong { color: #ffe294; font-size: 58px; line-height: 1; text-shadow: 0 0 18px #d5a23f3b; }
 @media (max-width: 560px) { .settlement-page { padding: 18px 14px; }.settlement-card { padding: 24px 16px; }.score-details { grid-template-columns: repeat(2, minmax(0, 1fr)); }.score-details article:nth-child(3) { border-top: 1px solid #2f4b68; border-left: 0; }.score-details article:nth-child(4) { border-top: 1px solid #2f4b68; }.settlement-score, .score-total strong { font-size: 48px; }.settlement-actions { grid-template-columns: 1fr; }.settlement-actions.is-endless { grid-template-columns: minmax(170px, 240px); }.endless-score-equation { gap: 8px; }.score-line strong { font-size: 27px; } }
+.settlement-card { border-radius: 8px; }.result-status { display: grid; gap: 2px; justify-items: center; margin-bottom: 5px; }.result-status span { padding: 5px 12px; border: 1px solid #cba445; border-radius: 4px; color: #ffe08b; font-size: 13px; font-weight: 900; letter-spacing: 2px; line-height: 1; }.result-status small { color: #d9bd71; font-size: 10px; letter-spacing: 1px; }.settlement-header.is-loss .result-status span { border-color: #a85763; color: #ffb5bf; }.settlement-header.is-loss .result-status small, .settlement-header.is-loss .settlement-kicker { color: #e28d99; }.settlement-button { border-radius: 6px; }.settlement-button.retry-button { border-color: #b5655e; background: #553239; color: #ffe8e7; }
 </style>

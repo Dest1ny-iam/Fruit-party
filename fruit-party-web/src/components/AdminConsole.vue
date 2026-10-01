@@ -70,12 +70,14 @@
 
       <AdminRechargeProducts
         v-else-if="section === 'recharge'"
+        ref="rechargeProducts"
         :loader="api.getAdminRechargeProducts"
         :saver="api.saveAdminRechargeProduct"
       />
 
       <AdminPermissionCenter
         v-else-if="section === 'permissions'"
+        ref="permissionCenter"
         :loader="api.getAdminPermissions"
         :permission-updater="api.updateAdminInfiniteEnergy"
         :coin-granter="api.grantAdminCoins"
@@ -83,6 +85,7 @@
 
       <AdminNotificationPublisher
         v-else-if="section === 'notifications'"
+        ref="notificationPublisher"
         :players="users"
         :loader="api.getAdminNotificationPublications"
         :publisher="api.publishAdminNotification"
@@ -204,6 +207,8 @@ export default {
       revenueRangeError: '',
       revenueAggregation: 'day',
       revenueData: { label: '', labels: [], values: [], granularity: '日', totalRevenueCents: 0, paidOrderCount: 0, coinsIssued: 0 },
+      adminStreamCloser: null,
+      adminRefreshTimer: null,
     }
   },
   computed: {
@@ -239,6 +244,21 @@ export default {
     this.loadAdminData()
     this.loadAuditLogs()
     this.loadRevenue()
+  },
+  mounted() {
+    if (typeof this.api.openAdminEventStream === 'function') {
+      this.adminStreamCloser = this.api.openAdminEventStream((eventName) => {
+        if (['items-updated', 'players-updated', 'permissions-updated'].includes(eventName)) this.loadAdminData()
+        if (eventName === 'notifications-updated' && this.section === 'notifications') this.$refs.notificationPublisher?.load?.()
+        if (eventName === 'recharge-products-updated' && this.section === 'recharge') this.$refs.rechargeProducts?.reload?.()
+      })
+    }
+    this.adminRefreshTimer = window.setInterval(() => this.loadAdminData(), 15000)
+  },
+  beforeDestroy() {
+    this.adminStreamCloser?.()
+    this.adminStreamCloser = null
+    window.clearInterval(this.adminRefreshTimer)
   },
   watch: {
     // 左侧导航离开用户模块时释放详情状态，重新进入时始终从用户列表开始。
@@ -291,7 +311,6 @@ export default {
         const result = await this.api.getAdminAuditLogs({ type: this.logFilter, page: 1, pageSize: 100 })
         this.logs = result.items
       } catch (error) {
-        this.logs = []
         this.feedback = error.message || '操作日志加载失败，请刷新页面后重试'
       }
     },
@@ -313,7 +332,6 @@ export default {
           coinsIssued: result.coinsIssued,
         }
       } catch (error) {
-        this.revenueData = { label: '', labels: [], values: [], granularity: '日', totalRevenueCents: 0, paidOrderCount: 0, coinsIssued: 0 }
         this.feedback = error.message || '营收数据加载失败，请刷新页面后重试'
       }
     },

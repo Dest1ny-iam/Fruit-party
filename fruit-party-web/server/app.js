@@ -4,11 +4,13 @@ import { createDatabase, readLeaderboards, readPlayerState, seedDatabase } from 
 import { USERNAME_PATTERN, hashPassword, issueToken, readToken, validateCredentials, verifyPassword } from './auth.js'
 import { calculateSettlement } from './scoring.js'
 import { createRealtimeHub } from './realtime.js'
-import { createRechargeOrder, enterGame, grantPlayerPrivileges, listNotifications, markNotificationRead, publishNotification, removeNotification, setTesterMode } from './business.js'
+import { activateGameSessionItem, cancelRechargeOrder, confirmRechargeOrder, createRechargeOrder, enterGame, grantPlayerPrivileges, listNotifications, markNotificationRead, publishNotification, readRechargeOrder, removeNotification, reviveGameSession, setTesterMode } from './business.js'
 import { purchaseItem } from './economy.js'
 import { useInventoryItem } from './items.js'
+import { readMaintenanceStatus, updateMaintenanceStatus } from './system-status.js'
+import { createRateLimiter, resolveRateLimits } from './rate-limit.js'
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fruit-party-local-development-secret'
+const JWT_SECRET = process.env.JWT_SECRET || (process.env.NODE_ENV === 'production' ? (() => { throw new Error('JWT_SECRET is required in production') })() : 'fruit-party-local-development-secret')
 const SESSION_COOKIE = 'fruit_party_session'
 
 function apiError(res, status, code, message) {
@@ -31,11 +33,16 @@ function setSessionCookie(res, token) {
 
 const AUDIT_ACTION_LABELS = {
   update_item_price: '调整道具价格',
+  create_item: '新增道具',
+  update_item: '编辑道具',
+  update_item_status: '切换道具状态',
   grant_privileges: '更新玩家特殊权限',
   publish_notification: '发布通知',
   create_recharge_product: '新增充值商品',
   game_settlement: '游戏结算完成',
   wallet_change: '金币余额变动',
+  maintenance_change: '切换维护状态',
+  confirm_recharge: '确认充值到账',
 }
 
 function positivePage(value, fallback, maximum) {
@@ -116,12 +123,34 @@ function presentRechargeProduct(product) {
   }
 }
 
-export async function createApp({ databaseName, databaseConfig, seed = false } = {}) {
+function validQrCodeUrl(value) {
+  if (value === '') return true
+  if (typeof value !== 'string' || value.length > 2_000_000) return false
+  if (/^https:\/\//i.test(value)) return true
+  return /^data:image\/(png|jpeg|webp);base64,[a-z0-9+/=]+$/i.test(value)
+}
+
+export async function createApp({ databaseName, databaseConfig, seed = false, rateLimitConfig } = {}) {
   const db = await createDatabase({ databaseName, config: databaseConfig })
   if (seed) await seedDatabase(db, hashPassword)
   const realtime = createRealtimeHub()
   const app = express()
-  app.use(cors())
+  const rateLimits = resolveRateLimits(rateLimitConfig)
+  const loginRateLimit = createRateLimiter({
+    limit: rateLimits.login,
+    code: 'LOGIN_RATE_LIMITED',
+    message: '登录尝试过于频繁，请稍后再试',
+  })
+  const adminWriteRateLimit = createRateLimiter({
+    limit: rateLimits.adminWrite,
+    code: 'ADMIN_RATE_LIMITED',
+    message: '管理员操作过于频繁，请稍后再试',
+  })
+  const corsOrigins = String(process.env.CORS_ORIGIN || '').split(',').map((origin) => origin.trim()).filter(Boolean)
+  app.use(cors({
+    origin: corsOrigins.length ? (origin, callback) => callback(null, !origin || corsOrigins.includes(origin)) : true,
+    credentials: true,
+  }))
   app.use(express.json({ limit: '1mb' }))
 
   const authenticate = async (req, res, next) => {
@@ -129,7 +158,7 @@ export async function createApp({ databaseName, databaseConfig, seed = false } =
     if (!token) return apiError(res, 401, 'AUTH_REQUIRED', '请先登录')
     try {
       req.auth = readToken(token, JWT_SECRET)
-      const [account] = await db.query('SELECT id, role, is_disabled AS isDisabled FROM users WHERE id = ?', [req.auth.sub])
+      const [account] = await db.query('SELECT id, role, is_tester AS isTester, is_disabled AS isDisabled FROM users WHERE id = ?', [req.auth.sub])
       if (!account) return apiError(res, 401, 'INVALID_TOKEN', '登录状态已失效')
       if (account.isDisabled) return apiError(res, 403, 'ACCOUNT_DISABLED', '该账号已被禁用')
       req.account = account
@@ -142,6 +171,14 @@ export async function createApp({ databaseName, databaseConfig, seed = false } =
   const requireAdmin = (req, res, next) => {
     if (req.account?.role !== 'admin') return apiError(res, 403, 'ADMIN_REQUIRED', '需要管理员权限')
     return next()
+  }
+
+  const requireServiceAvailable = async (req, res) => {
+    if (req.account?.role === 'admin' || req.account?.isTester) return true
+    const status = await readMaintenanceStatus(db)
+    if (!status.enabled) return true
+    apiError(res, 503, 'MAINTENANCE', status.message || '服务维护中，请稍后再试')
+    return false
   }
 
   app.get('/', (_req, res) => {
@@ -159,7 +196,11 @@ export async function createApp({ databaseName, databaseConfig, seed = false } =
 
   app.get('/api/health', async (_req, res) => res.json({ data: { status: 'ok', database: 'mysql' }, error: null }))
 
-  app.post('/api/auth/login', async (req, res) => {
+  app.get('/api/system/status', async (_req, res, next) => {
+    try { return res.json({ data: await readMaintenanceStatus(db), error: null }) } catch (error) { return next(error) }
+  })
+
+  app.post('/api/auth/login', loginRateLimit, async (req, res) => {
     const { username = '', password = '', acceptedTerms = false } = req.body || {}
     if (!acceptedTerms) return apiError(res, 422, 'TERMS_REQUIRED', '请先阅读并同意用户协议')
     const [user] = await db.query('SELECT id, username, password_hash AS passwordHash, role, is_disabled AS isDisabled FROM users WHERE username = ?', [username.trim()])
@@ -199,6 +240,31 @@ export async function createApp({ databaseName, databaseConfig, seed = false } =
     return res.json({ data: state, error: null })
   })
 
+  app.get('/api/me/wallet/ledger', authenticate, async (req, res, next) => {
+    const page = positivePage(req.query.page, 1, 1000000)
+    const pageSize = positivePage(req.query.pageSize, 20, 100)
+    const offset = (page - 1) * pageSize
+    try {
+      const [[count], rows] = await Promise.all([
+        db.query('SELECT COUNT(*) AS total FROM wallet_ledger WHERE user_id = ?', [req.auth.sub]),
+        db.query(`SELECT id, transaction_type AS transactionType, reference_type AS referenceType,
+          coins_delta AS amount, balance_after AS balanceAfter, created_at AS occurredAt
+          FROM wallet_ledger WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`, [req.auth.sub, pageSize, offset]),
+      ])
+      const titleFor = (row) => {
+        if (row.transactionType === 'game_reward') return '完成游戏奖励'
+        if (row.transactionType === 'purchase') return '商城购买道具'
+        if (row.transactionType === 'admin_grant') return '管理员赠送金币'
+        if (row.transactionType === 'recharge') return '充值到账'
+        return '金币余额变动'
+      }
+      return res.json({ data: {
+        items: rows.map((row) => ({ ...row, amount: Number(row.amount), balanceAfter: Number(row.balanceAfter), title: titleFor(row), occurredAt: new Date(row.occurredAt).toISOString() })),
+        page, pageSize, total: Number(count.total),
+      }, error: null })
+    } catch (error) { return next(error) }
+  })
+
   app.patch('/api/me/profile', authenticate, async (req, res, next) => {
     try {
       const avatarUrl = typeof req.body?.avatarUrl === 'string' ? req.body.avatarUrl.trim() : null
@@ -228,6 +294,7 @@ export async function createApp({ databaseName, databaseConfig, seed = false } =
   app.get('/api/leaderboards', async (_req, res) => res.json({ data: await readLeaderboards(db), error: null }))
 
   app.post('/api/game/entries', authenticate, async (req, res, next) => {
+    if (!await requireServiceAvailable(req, res)) return
     try {
       const entry = await enterGame(db, { userId: Number(req.auth.sub), mode: req.body?.mode, levelNumber: req.body?.levelNumber, itemKeys: req.body?.itemKeys || [] })
       const state = await readPlayerState(db, req.auth.sub)
@@ -245,6 +312,7 @@ export async function createApp({ databaseName, databaseConfig, seed = false } =
   })
 
   app.post('/api/shop/purchases', authenticate, async (req, res, next) => {
+    if (!await requireServiceAvailable(req, res)) return
     try {
       const result = await purchaseItem(db, { userId: Number(req.auth.sub), ...req.body })
       const state = await readPlayerState(db, req.auth.sub)
@@ -262,11 +330,30 @@ export async function createApp({ databaseName, databaseConfig, seed = false } =
   })
 
   app.post('/api/me/inventory/use', authenticate, async (req, res, next) => {
+    if (!await requireServiceAvailable(req, res)) return
     try {
       const result = await useInventoryItem(db, { userId: Number(req.auth.sub), itemKey: req.body?.itemKey })
       const state = await readPlayerState(db, req.auth.sub)
       realtime.publish(req.auth.sub, 'player-state', state)
       return res.status(200).json({ data: result, error: null })
+    } catch (error) { return next(error) }
+  })
+
+  app.post('/api/game/sessions/:sessionId/items/:itemKey/activate', authenticate, async (req, res, next) => {
+    if (!await requireServiceAvailable(req, res)) return
+    try {
+      const result = await activateGameSessionItem(db, { userId: Number(req.auth.sub), sessionId: req.params.sessionId, itemKey: req.params.itemKey })
+      return res.json({ data: result, error: null })
+    } catch (error) { return next(error) }
+  })
+
+  app.post('/api/game/sessions/:sessionId/revive', authenticate, async (req, res, next) => {
+    if (!await requireServiceAvailable(req, res)) return
+    try {
+      const result = await reviveGameSession(db, { userId: Number(req.auth.sub), sessionId: req.params.sessionId })
+      const state = await readPlayerState(db, req.auth.sub)
+      realtime.publish(req.auth.sub, 'player-state', state)
+      return res.json({ data: result, error: null })
     } catch (error) { return next(error) }
   })
 
@@ -296,7 +383,16 @@ export async function createApp({ databaseName, databaseConfig, seed = false } =
   })
 
   app.post('/api/recharge-orders', authenticate, async (req, res, next) => {
+    if (!await requireServiceAvailable(req, res)) return
     try { return res.status(201).json({ data: await createRechargeOrder(db, { userId: Number(req.auth.sub), productId: Number(req.body?.productId) }), error: null }) } catch (error) { return next(error) }
+  })
+
+  app.get('/api/recharge-orders/:orderNo', authenticate, async (req, res, next) => {
+    try { return res.json({ data: await readRechargeOrder(db, { userId: Number(req.auth.sub), orderNo: req.params.orderNo, isAdmin: req.account?.role === 'admin' }), error: null }) } catch (error) { return next(error) }
+  })
+
+  app.post('/api/recharge-orders/:orderNo/cancel', authenticate, async (req, res, next) => {
+    try { return res.json({ data: await cancelRechargeOrder(db, { userId: Number(req.auth.sub), orderNo: req.params.orderNo }), error: null }) } catch (error) { return next(error) }
   })
 
   app.get('/api/admin/dashboard', authenticate, requireAdmin, async (_req, res, next) => {
@@ -333,14 +429,28 @@ export async function createApp({ databaseName, databaseConfig, seed = false } =
     } catch (error) { return next(error) }
   })
 
-  app.get('/api/admin/players', authenticate, requireAdmin, async (_req, res) => {
-    const players = await db.query(`SELECT u.id, u.username, u.role, u.is_tester AS isTester, u.is_disabled AS isDisabled,
-      u.coins, u.energy, u.created_at AS createdAt,
-      COALESCE(MAX(CASE WHEN p.mode = 'normal' AND p.unlocked = 1 THEN p.level_number END), 0) AS normalHighestLevel,
-      COALESCE(MAX(CASE WHEN p.mode = 'hard' AND p.unlocked = 1 THEN p.level_number END), 0) AS hardHighestLevel
-      FROM users u LEFT JOIN level_progress p ON p.user_id = u.id
-      GROUP BY u.id ORDER BY u.created_at DESC, u.id DESC`)
-    return res.json({ data: players.map((player) => ({ ...player, isTester: Boolean(player.isTester), isDisabled: Boolean(player.isDisabled) })), error: null })
+  app.get('/api/admin/players', authenticate, requireAdmin, async (req, res, next) => {
+    try {
+      const hasPaging = Object.keys(req.query || {}).length > 0
+      const page = positivePage(req.query.page, 1, 1000000)
+      const pageSize = positivePage(req.query.pageSize, 20, 100)
+      const keyword = String(req.query.keyword || '').trim()
+      const joined = String(req.query.joined || '').trim()
+      const filters = []
+      const values = []
+      if (keyword) { filters.push('u.username LIKE ?'); values.push(`%${keyword}%`) }
+      if (joined) { filters.push('DATE_FORMAT(u.created_at, \'%Y-%m\') LIKE ?'); values.push(`${joined}%`) }
+      const whereSql = filters.length ? ` WHERE ${filters.join(' AND ')}` : ''
+      const baseSql = `FROM users u LEFT JOIN level_progress p ON p.user_id = u.id${whereSql}`
+      const players = await db.query(`SELECT u.id, u.username, u.role, u.is_tester AS isTester, u.is_disabled AS isDisabled,
+        u.coins, u.energy, u.created_at AS createdAt,
+        COALESCE(MAX(CASE WHEN p.mode = 'normal' AND p.unlocked = 1 THEN p.level_number END), 0) AS normalHighestLevel,
+        COALESCE(MAX(CASE WHEN p.mode = 'hard' AND p.unlocked = 1 THEN p.level_number END), 0) AS hardHighestLevel
+        ${baseSql} GROUP BY u.id ORDER BY u.created_at DESC, u.id DESC${hasPaging ? ' LIMIT ? OFFSET ?' : ''}`, hasPaging ? [...values, pageSize, (page - 1) * pageSize] : values)
+      if (!hasPaging) return res.json({ data: players.map((player) => ({ ...player, isTester: Boolean(player.isTester), isDisabled: Boolean(player.isDisabled) })), error: null })
+      const [count] = await db.query(`SELECT COUNT(DISTINCT u.id) AS total ${baseSql}`, values)
+      return res.json({ data: { items: players.map((player) => ({ ...player, isTester: Boolean(player.isTester), isDisabled: Boolean(player.isDisabled) })), page, pageSize, total: Number(count.total) }, error: null })
+    } catch (error) { return next(error) }
   })
 
   app.get('/api/admin/permissions', authenticate, requireAdmin, async (req, res, next) => {
@@ -365,16 +475,87 @@ export async function createApp({ databaseName, databaseConfig, seed = false } =
     } catch (error) { return next(error) }
   })
 
-  app.get('/api/admin/items', authenticate, requireAdmin, async (_req, res, next) => {
+  app.get('/api/admin/items', authenticate, requireAdmin, async (req, res, next) => {
     try {
-      const items = await db.query(`SELECT id, item_key AS itemKey, display_name AS displayName, description,
-        price_coins AS priceCoins, max_purchase_quantity AS maxPurchaseQuantity, enabled, display_order AS displayOrder
-        FROM item_catalog ORDER BY display_order, id`)
-      return res.json({ data: items.map((item) => ({ ...item, enabled: Boolean(item.enabled) })), error: null })
+      const hasPaging = Object.keys(req.query || {}).length > 0
+      const page = positivePage(req.query.page, 1, 1000000)
+      const pageSize = positivePage(req.query.pageSize, 20, 100)
+      const keyword = String(req.query.keyword || '').trim()
+      const keywordSql = keyword ? ' WHERE item_key LIKE ? OR display_name LIKE ?' : ''
+      const keywordValues = keyword ? [`%${keyword}%`, `%${keyword}%`] : []
+      const [items, [count]] = await Promise.all([
+        db.query(`SELECT id, item_key AS itemKey, display_name AS displayName, description, icon,
+          price_coins AS priceCoins, max_purchase_quantity AS maxPurchaseQuantity, enabled, display_order AS displayOrder
+          FROM item_catalog${keywordSql} ORDER BY display_order, id${hasPaging ? ' LIMIT ? OFFSET ?' : ''}`, hasPaging ? [...keywordValues, pageSize, (page - 1) * pageSize] : keywordValues),
+        db.query(`SELECT COUNT(*) AS total FROM item_catalog${keywordSql}`, keywordValues),
+      ])
+      const normalized = items.map((item) => ({ ...item, enabled: Boolean(item.enabled), priceCoins: Number(item.priceCoins), maxPurchaseQuantity: Number(item.maxPurchaseQuantity), displayOrder: Number(item.displayOrder) }))
+      return res.json({ data: hasPaging ? { items: normalized, page, pageSize, total: Number(count.total) } : normalized, error: null })
     } catch (error) { return next(error) }
   })
 
-  app.patch('/api/admin/items/:itemId/price', authenticate, requireAdmin, async (req, res, next) => {
+  app.post('/api/admin/items', authenticate, requireAdmin, adminWriteRateLimit, async (req, res, next) => {
+    const itemKey = String(req.body?.itemKey || '').trim()
+    const displayName = String(req.body?.displayName || '').trim()
+    const description = String(req.body?.description || '').trim()
+    const icon = String(req.body?.icon || '').trim() || null
+    const priceCoins = Number(req.body?.priceCoins)
+    const maxPurchaseQuantity = Number(req.body?.maxPurchaseQuantity ?? 99)
+    const displayOrder = Number(req.body?.displayOrder ?? 0)
+    if (!/^[a-z0-9][a-z0-9-]{1,63}$/.test(itemKey) || !displayName || !description || !Number.isInteger(priceCoins) || priceCoins < 1 || !Number.isInteger(maxPurchaseQuantity) || maxPurchaseQuantity < 1 || maxPurchaseQuantity > 999 || !Number.isInteger(displayOrder)) return apiError(res, 422, 'INVALID_ITEM', '道具信息无效')
+    try {
+      const created = await db.transaction(async (transaction) => {
+        let result
+        try { result = await transaction.execute('INSERT INTO item_catalog (item_key, display_name, description, icon, price_coins, max_purchase_quantity, display_order) VALUES (?, ?, ?, ?, ?, ?, ?)', [itemKey, displayName, description, icon, priceCoins, maxPurchaseQuantity, displayOrder]) } catch (error) { if (error.code === 'ER_DUP_ENTRY') throw requestError(409, 'ITEM_KEY_TAKEN', '道具标识已存在'); throw error }
+        await transaction.execute("INSERT INTO admin_audit_logs (admin_id, action, target_type, target_id, details) VALUES (?, 'create_item', 'item_catalog', ?, ?)", [req.auth.sub, String(result.insertId), JSON.stringify({ itemKey, displayName })])
+        const [item] = await transaction.query('SELECT id, item_key AS itemKey, display_name AS displayName, description, icon, price_coins AS priceCoins, max_purchase_quantity AS maxPurchaseQuantity, enabled, display_order AS displayOrder FROM item_catalog WHERE id = ?', [result.insertId])
+        return { ...item, enabled: Boolean(item.enabled) }
+      })
+      realtime.publishAll('items-updated', { itemId: created.id, action: 'created' })
+      return res.status(201).json({ data: created, error: null })
+    } catch (error) { return next(error) }
+  })
+
+  app.patch('/api/admin/items/:itemId', authenticate, requireAdmin, adminWriteRateLimit, async (req, res, next) => {
+    const itemId = Number(req.params.itemId)
+    const itemKey = String(req.body?.itemKey || '').trim()
+    const displayName = String(req.body?.displayName || '').trim()
+    const description = String(req.body?.description || '').trim()
+    const icon = String(req.body?.icon || '').trim() || null
+    const priceCoins = Number(req.body?.priceCoins)
+    const maxPurchaseQuantity = Number(req.body?.maxPurchaseQuantity ?? 99)
+    const displayOrder = Number(req.body?.displayOrder ?? 0)
+    if (!Number.isInteger(itemId) || itemId < 1 || !/^[a-z0-9][a-z0-9-]{1,63}$/.test(itemKey) || !displayName || !description || !Number.isInteger(priceCoins) || priceCoins < 1 || !Number.isInteger(maxPurchaseQuantity) || maxPurchaseQuantity < 1 || maxPurchaseQuantity > 999 || !Number.isInteger(displayOrder)) return apiError(res, 422, 'INVALID_ITEM', '道具信息无效')
+    try {
+      const updated = await db.transaction(async (transaction) => {
+        const result = await transaction.execute('UPDATE item_catalog SET item_key = ?, display_name = ?, description = ?, icon = ?, price_coins = ?, max_purchase_quantity = ?, display_order = ? WHERE id = ?', [itemKey, displayName, description, icon, priceCoins, maxPurchaseQuantity, displayOrder, itemId])
+        if (!result.affectedRows) throw requestError(404, 'ITEM_NOT_FOUND', '道具不存在')
+        await transaction.execute("INSERT INTO admin_audit_logs (admin_id, action, target_type, target_id, details) VALUES (?, 'update_item', 'item_catalog', ?, ?)", [req.auth.sub, String(itemId), JSON.stringify({ itemKey, displayName, priceCoins })])
+        const [item] = await transaction.query('SELECT id, item_key AS itemKey, display_name AS displayName, description, icon, price_coins AS priceCoins, max_purchase_quantity AS maxPurchaseQuantity, enabled, display_order AS displayOrder FROM item_catalog WHERE id = ?', [itemId])
+        return { ...item, enabled: Boolean(item.enabled) }
+      })
+      realtime.publishAll('items-updated', { itemId: updated.id, action: 'updated' })
+      return res.json({ data: updated, error: null })
+    } catch (error) { return next(error) }
+  })
+
+  app.patch('/api/admin/items/:itemId/status', authenticate, requireAdmin, adminWriteRateLimit, async (req, res, next) => {
+    const itemId = Number(req.params.itemId)
+    if (!Number.isInteger(itemId) || itemId < 1 || typeof req.body?.enabled !== 'boolean') return apiError(res, 422, 'INVALID_ITEM_STATUS', '道具状态无效')
+    try {
+      const updated = await db.transaction(async (transaction) => {
+        const result = await transaction.execute('UPDATE item_catalog SET enabled = ? WHERE id = ?', [req.body.enabled ? 1 : 0, itemId])
+        if (!result.affectedRows) throw requestError(404, 'ITEM_NOT_FOUND', '道具不存在')
+        await transaction.execute("INSERT INTO admin_audit_logs (admin_id, action, target_type, target_id, details) VALUES (?, 'update_item_status', 'item_catalog', ?, ?)", [req.auth.sub, String(itemId), JSON.stringify({ enabled: req.body.enabled })])
+        const [item] = await transaction.query('SELECT id, item_key AS itemKey, display_name AS displayName, description, icon, price_coins AS priceCoins, max_purchase_quantity AS maxPurchaseQuantity, enabled, display_order AS displayOrder FROM item_catalog WHERE id = ?', [itemId])
+        return { ...item, enabled: Boolean(item.enabled) }
+      })
+      realtime.publishAll('items-updated', { itemId: updated.id, action: 'status' })
+      return res.json({ data: updated, error: null })
+    } catch (error) { return next(error) }
+  })
+
+  app.patch('/api/admin/items/:itemId/price', authenticate, requireAdmin, adminWriteRateLimit, async (req, res, next) => {
     const itemId = Number(req.params.itemId)
     const priceCoins = Number(req.body?.priceCoins)
     if (!Number.isInteger(itemId) || itemId < 1) return apiError(res, 422, 'INVALID_ITEM_ID', '无效道具')
@@ -390,6 +571,7 @@ export async function createApp({ databaseName, databaseConfig, seed = false } =
           FROM item_catalog WHERE id = ?`, [itemId])
         return { ...item, enabled: Boolean(item.enabled) }
       })
+      realtime.publishAll('items-updated', { itemId: updated.id, action: 'price' })
       return res.json({ data: updated, error: null })
     } catch (error) { return next(error) }
   })
@@ -503,7 +685,7 @@ export async function createApp({ databaseName, databaseConfig, seed = false } =
     afterEndDate.setUTCDate(afterEndDate.getUTCDate() + 1)
     try {
       const [paidOrders, [wallet], [orderCount]] = await Promise.all([
-        db.query(`SELECT o.paid_at AS paidAt, p.price_cents AS priceCents
+        db.query(`SELECT DATE_FORMAT(o.paid_at, '%Y-%m-%d') AS paidDate, p.price_cents AS priceCents
           FROM recharge_orders o JOIN recharge_products p ON p.id = o.product_id
           WHERE o.status = 'paid' AND o.paid_at >= ? AND o.paid_at < ?`, [calendarDateKey(startDate), calendarDateKey(afterEndDate)]),
         db.query('SELECT COALESCE(SUM(coins_delta), 0) AS coinsIssued FROM wallet_ledger WHERE coins_delta > 0 AND created_at >= ? AND created_at < ?', [calendarDateKey(startDate), calendarDateKey(afterEndDate)]),
@@ -512,7 +694,8 @@ export async function createApp({ databaseName, databaseConfig, seed = false } =
       const points = createRevenueBuckets(startDate, endDate, aggregation)
       const pointsByKey = new Map(points.map((point) => [point.key, point]))
       for (const order of paidOrders) {
-        const paidAt = new Date(order.paidAt)
+        const paidAt = parseCalendarDate(order.paidDate)
+        if (!paidAt) continue
         const key = calendarDateKey(floorCalendarBucket(paidAt, aggregation))
         const point = pointsByKey.get(key)
         if (point) point.valueCents += Number(order.priceCents)
@@ -527,7 +710,7 @@ export async function createApp({ databaseName, databaseConfig, seed = false } =
     } catch (error) { return next(error) }
   })
 
-  app.patch('/api/admin/players/:playerId/status', authenticate, requireAdmin, async (req, res) => {
+  app.patch('/api/admin/players/:playerId/status', authenticate, requireAdmin, adminWriteRateLimit, async (req, res) => {
     const playerId = Number(req.params.playerId)
     const disabled = req.body?.disabled === true
     if (!Number.isInteger(playerId) || playerId < 1) return apiError(res, 422, 'INVALID_PLAYER_ID', '无效玩家')
@@ -535,22 +718,25 @@ export async function createApp({ databaseName, databaseConfig, seed = false } =
     const result = await db.execute('UPDATE users SET is_disabled = ?, disabled_at = IF(?, CURRENT_TIMESTAMP, NULL) WHERE id = ?', [disabled ? 1 : 0, disabled ? 1 : 0, playerId])
     if (!result.affectedRows) return apiError(res, 404, 'PLAYER_NOT_FOUND', '玩家不存在')
     realtime.publish(playerId, disabled ? 'account-disabled' : 'account-enabled', { playerId })
+    realtime.publishAll('players-updated', { playerId, disabled })
+    realtime.publishAll('permissions-updated', { playerId, disabled })
     realtime.publishAll('leaderboards', await readLeaderboards(db))
     return res.json({ data: { playerId, disabled }, error: null })
   })
 
-  app.patch('/api/admin/players/:playerId/privileges', authenticate, requireAdmin, async (req, res, next) => {
+  app.patch('/api/admin/players/:playerId/privileges', authenticate, requireAdmin, adminWriteRateLimit, async (req, res, next) => {
     const playerId = Number(req.params.playerId)
     try {
       const [admin] = await db.query('SELECT password_hash AS passwordHash FROM users WHERE id = ?', [req.auth.sub])
       if (!admin || !verifyPassword(req.body?.adminPassword || '', admin.passwordHash)) return apiError(res, 401, 'ADMIN_PASSWORD_INVALID', '管理员密码不正确')
       const privileges = await grantPlayerPrivileges(db, { adminId: Number(req.auth.sub), playerId, privileges: req.body?.privileges })
       realtime.publish(playerId, 'player-state', await readPlayerState(db, playerId))
+      realtime.publishAll('permissions-updated', { playerId })
       return res.json({ data: privileges, error: null })
     } catch (error) { return next(error) }
   })
 
-  app.post('/api/admin/players/:playerId/coin-grants', authenticate, requireAdmin, async (req, res, next) => {
+  app.post('/api/admin/players/:playerId/coin-grants', authenticate, requireAdmin, adminWriteRateLimit, async (req, res, next) => {
     const playerId = Number(req.params.playerId)
     const operationId = String(req.body?.operationId || '')
     if (!Number.isInteger(playerId) || playerId < 1) return apiError(res, 422, 'INVALID_PLAYER_ID', '无效玩家')
@@ -568,36 +754,97 @@ export async function createApp({ databaseName, databaseConfig, seed = false } =
         return { id: player.id, username: player.username, coins, duplicate: false }
       })
       realtime.publish(playerId, 'player-state', await readPlayerState(db, playerId))
+      realtime.publishAll('players-updated', { playerId, action: 'coin-grant' })
       return res.status(201).json({ data: updated, error: null })
     } catch (error) { return next(error) }
   })
 
-  app.post('/api/admin/notifications', authenticate, requireAdmin, async (req, res, next) => {
+  app.post('/api/admin/notifications', authenticate, requireAdmin, adminWriteRateLimit, async (req, res, next) => {
     try {
       const message = await publishNotification(db, { adminId: Number(req.auth.sub), title: req.body?.title, body: req.body?.body, recipientIds: req.body?.recipientIds ?? null })
       for (const playerId of req.body?.recipientIds || []) realtime.publish(playerId, 'notifications-updated', { notificationId: message.id })
+      realtime.publishAll('notifications-updated', { notificationId: message.id })
       return res.status(201).json({ data: message, error: null })
     } catch (error) { return next(error) }
   })
 
-  app.get('/api/admin/notifications', authenticate, requireAdmin, async (_req, res, next) => {
+  app.get('/api/admin/notifications', authenticate, requireAdmin, async (req, res, next) => {
     try {
+      const hasPaging = Object.keys(req.query || {}).length > 0
+      const page = positivePage(req.query.page, 1, 1000000)
+      const pageSize = positivePage(req.query.pageSize, 20, 100)
       const messages = await db.query(`SELECT m.id, m.title, m.body AS content, m.audience, m.created_at AS sentAt,
         COUNT(r.user_id) AS recipientCount, SUM(r.read_at IS NOT NULL) AS readCount
         FROM notification_messages m LEFT JOIN notification_recipients r ON r.notification_id = m.id
-        GROUP BY m.id ORDER BY m.created_at DESC, m.id DESC`)
-      return res.json({ data: messages.map((message) => ({ ...message, audienceLabel: message.audience === 'all' ? '全体玩家' : `指定玩家（${message.recipientCount}）`, recipientCount: Number(message.recipientCount), readCount: Number(message.readCount || 0), status: 'sent' })), error: null })
+        GROUP BY m.id ORDER BY m.created_at DESC, m.id DESC${hasPaging ? ' LIMIT ? OFFSET ?' : ''}`, hasPaging ? [pageSize, (page - 1) * pageSize] : [])
+      const normalized = messages.map((message) => ({ ...message, audienceLabel: message.audience === 'all' ? '全体玩家' : `指定玩家（${message.recipientCount}）`, recipientCount: Number(message.recipientCount), readCount: Number(message.readCount || 0), status: 'sent' }))
+      if (!hasPaging) return res.json({ data: normalized, error: null })
+      const [count] = await db.query('SELECT COUNT(*) AS total FROM notification_messages')
+      return res.json({ data: { items: normalized, page, pageSize, total: Number(count.total) }, error: null })
     } catch (error) { return next(error) }
   })
 
-  app.get('/api/admin/recharge-products', authenticate, requireAdmin, async (_req, res, next) => {
+  app.get('/api/admin/recharge-products', authenticate, requireAdmin, async (req, res, next) => {
     try {
-      const products = await db.query('SELECT id, display_name AS displayName, description, price_cents AS priceCents, benefits, qr_code_url AS qrCodeUrl, enabled, display_order AS displayOrder FROM recharge_products ORDER BY display_order, id')
-      return res.json({ data: products.map(presentRechargeProduct), error: null })
+      const hasPaging = Object.keys(req.query || {}).length > 0
+      const page = positivePage(req.query.page, 1, 1000000)
+      const pageSize = positivePage(req.query.pageSize, 20, 100)
+      const products = await db.query(`SELECT id, display_name AS displayName, description, price_cents AS priceCents, benefits, qr_code_url AS qrCodeUrl, enabled, display_order AS displayOrder FROM recharge_products ORDER BY display_order, id${hasPaging ? ' LIMIT ? OFFSET ?' : ''}`, hasPaging ? [pageSize, (page - 1) * pageSize] : [])
+      const normalized = products.map(presentRechargeProduct)
+      if (!hasPaging) return res.json({ data: normalized, error: null })
+      const [count] = await db.query('SELECT COUNT(*) AS total FROM recharge_products')
+      return res.json({ data: { items: normalized, page, pageSize, total: Number(count.total) }, error: null })
     } catch (error) { return next(error) }
   })
 
-  app.post('/api/admin/recharge-products', authenticate, requireAdmin, async (req, res, next) => {
+  app.get('/api/admin/system/maintenance', authenticate, requireAdmin, async (_req, res, next) => {
+    try { return res.json({ data: await readMaintenanceStatus(db), error: null }) } catch (error) { return next(error) }
+  })
+
+  app.patch('/api/admin/system/maintenance', authenticate, requireAdmin, adminWriteRateLimit, async (req, res, next) => {
+    try {
+      if (typeof req.body?.enabled !== 'boolean') return apiError(res, 422, 'INVALID_MAINTENANCE', '维护状态无效')
+      const status = await updateMaintenanceStatus(db, {
+        adminId: Number(req.auth.sub),
+        enabled: req.body.enabled,
+        message: req.body.message,
+        estimatedEndAt: req.body.estimatedEndAt || null,
+      })
+      realtime.publishAll('maintenance-changed', status)
+      return res.json({ data: status, error: null })
+    } catch (error) { return next(error) }
+  })
+
+  app.get('/api/admin/recharge-orders', authenticate, requireAdmin, async (req, res, next) => {
+    const page = positivePage(req.query.page, 1, 1000000)
+    const pageSize = positivePage(req.query.pageSize, 20, 100)
+    const status = ['pending', 'paid', 'expired', 'cancelled'].includes(req.query.status) ? req.query.status : null
+    const statusSql = status ? ' WHERE o.status = ?' : ''
+    const statusValues = status ? [status] : []
+    try {
+      const [[count], rows] = await Promise.all([
+        db.query(`SELECT COUNT(*) AS total FROM recharge_orders o${statusSql}`, statusValues),
+        db.query(`SELECT o.order_no AS orderNo, o.user_id AS userId, u.username, o.product_id AS productId,
+          o.status, o.qr_code_url AS qrCodeUrl, o.expires_at AS expiresAt, o.paid_at AS paidAt,
+          p.display_name AS displayName, p.price_cents AS priceCents, p.benefits
+          FROM recharge_orders o JOIN users u ON u.id = o.user_id JOIN recharge_products p ON p.id = o.product_id
+          ${statusSql} ORDER BY o.created_at DESC, o.id DESC LIMIT ? OFFSET ?`, [...statusValues, pageSize, (page - 1) * pageSize]),
+      ])
+      return res.json({ data: { items: rows.map((row) => ({ ...row, priceCents: Number(row.priceCents), expiresAt: new Date(row.expiresAt).toISOString(), paidAt: row.paidAt ? new Date(row.paidAt).toISOString() : null })), page, pageSize, total: Number(count.total) }, error: null })
+    } catch (error) { return next(error) }
+  })
+
+  app.post('/api/admin/recharge-orders/:orderNo/confirm', authenticate, requireAdmin, adminWriteRateLimit, async (req, res, next) => {
+    try {
+      const result = await confirmRechargeOrder(db, { adminId: Number(req.auth.sub), orderNo: req.params.orderNo })
+      const order = await readRechargeOrder(db, { userId: Number(req.auth.sub), orderNo: req.params.orderNo, isAdmin: true })
+      realtime.publish(Number(order.userId), 'player-state', await readPlayerState(db, Number(order.userId)))
+      realtime.publishAll('recharge-orders-updated', { orderNo: req.params.orderNo, userId: Number(order.userId) })
+      return res.json({ data: result, error: null })
+    } catch (error) { return next(error) }
+  })
+
+  app.post('/api/admin/recharge-products', authenticate, requireAdmin, adminWriteRateLimit, async (req, res, next) => {
     try {
       const displayName = String(req.body?.displayName || '').trim()
       const description = String(req.body?.description || '').trim()
@@ -606,18 +853,19 @@ export async function createApp({ databaseName, databaseConfig, seed = false } =
       const benefits = parseRechargeBenefits(req.body?.benefits)
       const enabled = req.body?.enabled !== false
       const displayOrder = Math.round(Number(req.body?.displayOrder) || 0)
-      if (!displayName || !description || !Number.isInteger(priceCents) || priceCents < 1 || !benefits || (enabled && !qrCodeUrl)) return apiError(res, 422, 'INVALID_RECHARGE_PRODUCT', '充值商品信息无效')
+      if (!displayName || !description || !Number.isInteger(priceCents) || priceCents < 1 || !benefits || !validQrCodeUrl(qrCodeUrl) || (enabled && !qrCodeUrl)) return apiError(res, 422, 'INVALID_RECHARGE_PRODUCT', '充值商品信息无效')
       const result = await db.transaction(async (transaction) => {
         const created = await transaction.execute('INSERT INTO recharge_products (display_name, description, price_cents, benefits, qr_code_url, enabled, display_order) VALUES (?, ?, ?, ?, ?, ?, ?)', [displayName, description, priceCents, JSON.stringify(benefits), qrCodeUrl || null, enabled ? 1 : 0, displayOrder])
         await transaction.execute(`INSERT INTO admin_audit_logs (admin_id, action, target_type, target_id, details) VALUES (?, 'create_recharge_product', 'recharge_product', ?, ?)` , [req.auth.sub, String(created.insertId), JSON.stringify({ displayName, priceCents })])
         const [product] = await transaction.query('SELECT id, display_name AS displayName, description, price_cents AS priceCents, benefits, qr_code_url AS qrCodeUrl, enabled, display_order AS displayOrder FROM recharge_products WHERE id = ?', [created.insertId])
         return presentRechargeProduct(product)
       })
+      realtime.publishAll('recharge-products-updated', { productId: result.id, action: 'created' })
       return res.status(201).json({ data: result, error: null })
     } catch (error) { return next(error) }
   })
 
-  app.patch('/api/admin/recharge-products/:productId', authenticate, requireAdmin, async (req, res, next) => {
+  app.patch('/api/admin/recharge-products/:productId', authenticate, requireAdmin, adminWriteRateLimit, async (req, res, next) => {
     const productId = Number(req.params.productId)
     const displayName = String(req.body?.displayName || '').trim()
     const description = String(req.body?.description || '').trim()
@@ -626,7 +874,7 @@ export async function createApp({ databaseName, databaseConfig, seed = false } =
     const benefits = parseRechargeBenefits(req.body?.benefits)
     const enabled = req.body?.enabled !== false
     const displayOrder = Math.round(Number(req.body?.displayOrder) || 0)
-    if (!Number.isInteger(productId) || productId < 1 || !displayName || !description || !Number.isInteger(priceCents) || priceCents < 1 || !benefits || (enabled && !qrCodeUrl)) return apiError(res, 422, 'INVALID_RECHARGE_PRODUCT', '充值商品信息无效')
+    if (!Number.isInteger(productId) || productId < 1 || !displayName || !description || !Number.isInteger(priceCents) || priceCents < 1 || !benefits || !validQrCodeUrl(qrCodeUrl) || (enabled && !qrCodeUrl)) return apiError(res, 422, 'INVALID_RECHARGE_PRODUCT', '充值商品信息无效')
     try {
       const result = await db.transaction(async (transaction) => {
         const updated = await transaction.execute('UPDATE recharge_products SET display_name = ?, description = ?, price_cents = ?, benefits = ?, qr_code_url = ?, enabled = ?, display_order = ? WHERE id = ?', [displayName, description, priceCents, JSON.stringify(benefits), qrCodeUrl || null, enabled ? 1 : 0, displayOrder, productId])
@@ -635,6 +883,7 @@ export async function createApp({ databaseName, databaseConfig, seed = false } =
         const [product] = await transaction.query('SELECT id, display_name AS displayName, description, price_cents AS priceCents, benefits, qr_code_url AS qrCodeUrl, enabled, display_order AS displayOrder FROM recharge_products WHERE id = ?', [productId])
         return presentRechargeProduct(product)
       })
+      realtime.publishAll('recharge-products-updated', { productId: result.id, action: 'updated' })
       return res.json({ data: result, error: null })
     } catch (error) { return next(error) }
   })
@@ -648,15 +897,45 @@ export async function createApp({ databaseName, databaseConfig, seed = false } =
   })
 
   app.post('/api/game/settlements', authenticate, async (req, res) => {
-    const { mode, levelNumber, fruitHits, hitRate, elapsedSeconds } = req.body || {}
-    if (!['normal', 'hard', 'endless'].includes(mode)) return apiError(res, 422, 'INVALID_MODE', '无效的游戏模式')
-    if (mode !== 'endless' && (!Number.isInteger(levelNumber) || levelNumber < 1 || levelNumber > 10)) return apiError(res, 422, 'INVALID_LEVEL', '无效的关卡')
-    let settlement
-    try { settlement = calculateSettlement({ mode, levelNumber, fruitHits, hitRate, elapsedSeconds }) } catch { return apiError(res, 422, 'INVALID_SETTLEMENT', '无法计算本局结算') }
+    if (!await requireServiceAvailable(req, res)) return
+    const { sessionId, mode: requestedMode, levelNumber: requestedLevelNumber, fruitHits, hitRate, elapsedSeconds } = req.body || {}
+    if (typeof sessionId !== 'string' || !sessionId.trim()) return apiError(res, 422, 'SESSION_REQUIRED', '缺少有效的游戏场次')
+    let result
 
-    let actualCoinsAwarded = settlement.coinsAwarded
     try {
-      await db.transaction(async (transaction) => {
+      result = await db.transaction(async (transaction) => {
+        const [session] = await transaction.query(`
+          SELECT id, user_id AS userId, mode, level_number AS levelNumber, status, started_at AS startedAt, settlement_result AS settlementResult
+          FROM game_sessions WHERE id = ? FOR UPDATE
+        `, [sessionId.trim()])
+        if (!session) throw requestError(404, 'GAME_SESSION_NOT_FOUND', '游戏场次不存在')
+        if (Number(session.userId) !== Number(req.auth.sub)) throw requestError(403, 'GAME_SESSION_FORBIDDEN', '无权结算该游戏场次')
+        if (session.status === 'settled') {
+          const storedSettlement = typeof session.settlementResult === 'string' ? JSON.parse(session.settlementResult) : session.settlementResult
+          if (!storedSettlement) throw requestError(409, 'GAME_SESSION_INVALID', '游戏场次结算记录缺失')
+          return { replayed: true, settlement: storedSettlement }
+        }
+        if (session.status !== 'active') throw requestError(409, 'GAME_SESSION_CLOSED', '游戏场次已关闭')
+        if (requestedMode !== undefined && requestedMode !== session.mode) throw requestError(409, 'GAME_SESSION_MISMATCH', '游戏模式与场次不一致')
+        if (session.mode !== 'endless' && requestedLevelNumber !== undefined && Number(requestedLevelNumber) !== Number(session.levelNumber)) throw requestError(409, 'GAME_SESSION_MISMATCH', '游戏关卡与场次不一致')
+        const mode = session.mode
+        const levelNumber = session.levelNumber === null ? undefined : Number(session.levelNumber)
+        if (!['normal', 'hard', 'endless'].includes(mode)) throw requestError(422, 'INVALID_MODE', '无效的游戏模式')
+        if (mode !== 'endless' && (!Number.isInteger(levelNumber) || levelNumber < 1 || levelNumber > 10)) throw requestError(422, 'INVALID_LEVEL', '无效的关卡')
+        let authoritativeHits = Array.isArray(fruitHits) ? fruitHits : []
+        if (mode === 'endless') {
+          const [boost] = await transaction.query("SELECT active_until AS activeUntil FROM game_session_items WHERE session_id = ? AND item_key = 'score-boost' AND active_until IS NOT NULL FOR UPDATE", [session.id])
+          const activationStart = boost?.activeUntil ? new Date(boost.activeUntil).valueOf() - 20 * 1000 : 0
+          const sessionStartedAt = new Date(session.startedAt).valueOf()
+          authoritativeHits = authoritativeHits.map((hit) => {
+            const hitElapsed = Number(hit?.elapsedSeconds)
+            const hitAt = Number.isFinite(hitElapsed) ? sessionStartedAt + Math.max(0, hitElapsed) * 1000 : 0
+            const scoreBoost = activationStart > 0 && hitAt >= activationStart && hitAt <= activationStart + 20 * 1000 ? 1.2 : 1
+            return { ...hit, scoreBoost, elapsedSeconds: Number.isFinite(hitElapsed) ? hitElapsed : 0 }
+          })
+        } else authoritativeHits = authoritativeHits.map((hit) => ({ ...hit, scoreBoost: 1 }))
+        let settlement
+        try { settlement = calculateSettlement({ mode, levelNumber, fruitHits: authoritativeHits, hitRate, elapsedSeconds }) } catch { throw requestError(422, 'INVALID_SETTLEMENT', '无法计算本局结算') }
         const [player] = await transaction.query('SELECT coins, is_tester AS isTester FROM users WHERE id = ? FOR UPDATE', [req.auth.sub])
         if (!player) throw requestError(404, 'PLAYER_NOT_FOUND', '玩家不存在')
         if (mode !== 'endless') {
@@ -666,7 +945,6 @@ export async function createApp({ databaseName, databaseConfig, seed = false } =
         const attempt = await transaction.execute('INSERT INTO game_attempts (user_id, mode, level_number, base_score, final_score, hit_rate, elapsed_seconds, passed) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [req.auth.sub, mode, mode === 'endless' ? null : levelNumber, settlement.baseScore, settlement.finalScore, settlement.hitRate, settlement.elapsedSeconds, settlement.passed ? 1 : 0])
         const [coinBoost] = await transaction.query("SELECT expires_at AS expiresAt FROM player_effects WHERE user_id = ? AND effect_key = 'coin-boost' AND expires_at > CURRENT_TIMESTAMP FOR UPDATE", [req.auth.sub])
         const coinsAwarded = coinBoost ? Math.round(settlement.coinsAwarded * 1.5) : settlement.coinsAwarded
-        actualCoinsAwarded = coinsAwarded
         if (coinsAwarded > 0) {
           const nextCoins = Number(player.coins) + coinsAwarded
           await transaction.execute('UPDATE users SET coins = ? WHERE id = ?', [nextCoins, req.auth.sub])
@@ -679,6 +957,9 @@ export async function createApp({ databaseName, databaseConfig, seed = false } =
           await transaction.execute('UPDATE level_progress SET best_score = GREATEST(best_score, ?), completed_at = IF(?, COALESCE(completed_at, CURRENT_TIMESTAMP), completed_at) WHERE user_id = ? AND mode = ? AND level_number = ?', [settlement.finalScore, settlement.passed ? 1 : 0, req.auth.sub, mode, levelNumber])
           if (settlement.passed && levelNumber < 10) await transaction.execute('UPDATE level_progress SET unlocked = 1 WHERE user_id = ? AND mode = ? AND level_number = ?', [req.auth.sub, mode, levelNumber + 1])
         }
+        const responseSettlement = { ...settlement, coinsAwarded: Number(coinsAwarded) }
+        await transaction.execute('UPDATE game_sessions SET status = \'settled\', attempt_id = ?, settlement_result = ?, settlement_nonce = UUID(), settled_at = CURRENT_TIMESTAMP WHERE id = ?', [attempt.insertId, JSON.stringify(responseSettlement), sessionId.trim()])
+        return { replayed: false, settlement: responseSettlement }
       })
     } catch (error) {
       if (error.code && error.status) return apiError(res, error.status, error.code, error.message)
@@ -686,14 +967,13 @@ export async function createApp({ databaseName, databaseConfig, seed = false } =
     }
     const state = await readPlayerState(db, req.auth.sub)
     realtime.publish(req.auth.sub, 'player-state', state)
-    realtime.publishAll('leaderboards', await readLeaderboards(db))
-    const responseSettlement = { ...settlement, coinsAwarded: Number(actualCoinsAwarded) }
-    return res.status(201).json({ data: responseSettlement, error: null })
+    if (!result.replayed) realtime.publishAll('leaderboards', await readLeaderboards(db))
+    return res.status(result.replayed ? 200 : 201).json({ data: { ...result.settlement, replayed: result.replayed }, error: null })
   })
 
   app.use((error, _req, res, _next) => {
-    console.error(error)
     if (error.status && error.code) return apiError(res, error.status, error.code, error.message)
+    console.error(error)
     apiError(res, 500, 'INTERNAL_ERROR', '服务器内部错误')
   })
 

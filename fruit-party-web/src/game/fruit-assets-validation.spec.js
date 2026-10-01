@@ -2,7 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { validateFruitAssets } from '../../tools/verify-fruit-assets.mjs'
+import { validateFruitAssets, verifyFruitAssetRequirement } from '../../tools/verify-fruit-assets.mjs'
 
 const temporaryDirectories = []
 
@@ -25,5 +25,17 @@ describe('validateFruitAssets', () => {
       'watermelon/halfB',
     ])
     expect(result.valid).toBe(false)
+  })
+
+  it('allows deployment with procedural Three.js fruits while keeping GLB validation opt-in', async () => {
+    const modelsDirectory = await mkdtemp(join(tmpdir(), 'fruit-assets-'))
+    temporaryDirectories.push(modelsDirectory)
+
+    const procedural = await verifyFruitAssetRequirement({ modelsDirectory, requireGlbAssets: false })
+    const glbRequired = await verifyFruitAssetRequirement({ modelsDirectory, requireGlbAssets: true })
+
+    expect(procedural.valid).toBe(true)
+    expect(procedural.missing).toHaveLength(18)
+    expect(glbRequired.valid).toBe(false)
   })
 })

@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS item_catalog (
   item_key VARCHAR(64) NOT NULL,
   display_name VARCHAR(80) NOT NULL,
   description TEXT NOT NULL,
+  icon VARCHAR(255) NULL,
   price_coins INT UNSIGNED NOT NULL,
   max_purchase_quantity TINYINT UNSIGNED NOT NULL DEFAULT 99,
   enabled TINYINT(1) NOT NULL DEFAULT 1,
@@ -200,6 +201,7 @@ CREATE TABLE IF NOT EXISTS game_sessions (
   status ENUM('active', 'settled', 'abandoned') NOT NULL DEFAULT 'active',
   attempt_id BIGINT UNSIGNED NULL,
   settlement_nonce CHAR(36) NULL,
+  settlement_result JSON NULL,
   started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   settled_at DATETIME NULL,
   PRIMARY KEY (id),
@@ -209,3 +211,30 @@ CREATE TABLE IF NOT EXISTS game_sessions (
   CONSTRAINT game_sessions_attempt_fk FOREIGN KEY (attempt_id) REFERENCES game_attempts(id) ON DELETE SET NULL,
   CONSTRAINT game_sessions_level_bound CHECK (level_number IS NULL OR level_number BETWEEN 1 AND 10)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS game_session_items (
+  session_id CHAR(36) NOT NULL,
+  user_id BIGINT UNSIGNED NOT NULL,
+  item_key VARCHAR(64) NOT NULL,
+  allowed_uses TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  used_count TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  active_until DATETIME NULL,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (session_id, item_key),
+  KEY game_session_items_user_idx (user_id, item_key),
+  CONSTRAINT game_session_items_session_fk FOREIGN KEY (session_id) REFERENCES game_sessions(id) ON DELETE CASCADE,
+  CONSTRAINT game_session_items_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT game_session_items_uses_bound CHECK (used_count <= allowed_uses)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS system_settings (
+  setting_key VARCHAR(64) NOT NULL,
+  setting_value JSON NOT NULL,
+  updated_by BIGINT UNSIGNED NULL,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (setting_key),
+  CONSTRAINT system_settings_updated_by_fk FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+INSERT IGNORE INTO system_settings (setting_key, setting_value)
+VALUES ('maintenance', JSON_OBJECT('enabled', FALSE, 'message', '', 'estimatedEndAt', NULL));
